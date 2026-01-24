@@ -28,6 +28,19 @@ IMAGES_DIR = TRAINING_DIR / "labeling_images"
 LABELS_DIR = TRAINING_DIR / "labeling_labels"
 CLASS_NAME = "barbell_plate_side"
 
+# 학습 상태 (전역)
+import subprocess
+import threading
+
+training_state = {
+    'running': False,
+    'process': None,
+    'log': '',
+    'completed': False,
+    'success': False,
+    'model_path': None
+}
+
 # HTML 템플릿
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ko">
@@ -512,7 +525,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     ↩️ 실행취소 <span class="shortcut-hint">(Z)</span>
                 </button>
                 <button class="btn btn-success" onclick="exportDataset()">
-                    📦 데이터셋 Export
+                    📦 Export
+                </button>
+                <button class="btn btn-success" onclick="startTraining()" style="background: #ff6b6b;">
+                    🚀 학습 시작
                 </button>
 
                 <div class="navigation">
@@ -560,13 +576,24 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             <p><strong>위치:</strong></p>
             <code id="exportPath"></code>
             <p id="exportStats"></p>
-            <p><strong>학습 명령어:</strong></p>
-            <code>cd training && python3 -c "
-from ultralytics import YOLO
-model = YOLO('yolov8n.pt')
-model.train(data='barbell_plate_dataset_new/data.yaml', epochs=100, imgsz=320, device='mps')
-"</code>
             <button class="btn btn-primary" onclick="closeModal()">확인</button>
+        </div>
+    </div>
+
+    <!-- Training modal -->
+    <div class="modal" id="trainingModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3 id="trainingTitle">🚀 모델 학습</h3>
+            <div id="trainingStatus" style="margin: 16px 0;">
+                <p>학습 준비 중...</p>
+            </div>
+            <div style="background: #1a1a2e; padding: 12px; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+                <pre id="trainingLog" style="margin: 0; white-space: pre-wrap; color: #00d9ff;"></pre>
+            </div>
+            <div style="margin-top: 16px; display: flex; gap: 8px;">
+                <button class="btn btn-danger" id="stopTrainingBtn" onclick="stopTraining()">⏹ 학습 중지</button>
+                <button class="btn btn-primary" id="closeTrainingBtn" onclick="closeTrainingModal()" style="display: none;">확인</button>
+            </div>
         </div>
     </div>
 
@@ -980,6 +1007,99 @@ model.train(data='barbell_plate_dataset_new/data.yaml', epochs=100, imgsz=320, d
         function closeModal() {
             document.getElementById('exportModal').classList.remove('show');
         }
+
+        let trainingInterval = null;
+
+        async function startTraining() {
+            // First export the dataset
+            showToast('준비 중...', '데이터셋 Export 후 학습을 시작합니다...');
+
+            try {
+                const exportRes = await fetch('/api/export', { method: 'POST' });
+                const exportResult = await exportRes.json();
+
+                if (!exportResult.success || exportResult.imageCount === 0) {
+                    showToast('오류', '라벨링된 이미지가 없습니다. 먼저 라벨링을 해주세요.', true);
+                    return;
+                }
+
+                hideToast();
+
+                // Show training modal
+                document.getElementById('trainingModal').classList.add('show');
+                document.getElementById('trainingTitle').textContent = '🚀 모델 학습 중...';
+                document.getElementById('trainingLog').textContent = `데이터셋: ${exportResult.imageCount}개 이미지, ${exportResult.labelCount}개 라벨\\n\\n학습 시작 중...\\n`;
+                document.getElementById('stopTrainingBtn').style.display = 'inline-block';
+                document.getElementById('closeTrainingBtn').style.display = 'none';
+
+                // Start training
+                const trainRes = await fetch('/api/train', { method: 'POST' });
+                const trainResult = await trainRes.json();
+
+                if (trainResult.success) {
+                    // Poll for training status
+                    trainingInterval = setInterval(checkTrainingStatus, 2000);
+                } else {
+                    document.getElementById('trainingLog').textContent += `\\n오류: ${trainResult.error}`;
+                    document.getElementById('stopTrainingBtn').style.display = 'none';
+                    document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+                }
+            } catch (e) {
+                showToast('오류', e.message, true);
+            }
+        }
+
+        async function checkTrainingStatus() {
+            try {
+                const res = await fetch('/api/train/status');
+                const status = await res.json();
+
+                document.getElementById('trainingLog').textContent = status.log || '학습 중...';
+
+                // Auto-scroll to bottom
+                const logDiv = document.getElementById('trainingLog').parentElement;
+                logDiv.scrollTop = logDiv.scrollHeight;
+
+                if (status.completed) {
+                    clearInterval(trainingInterval);
+                    trainingInterval = null;
+
+                    if (status.success) {
+                        document.getElementById('trainingTitle').textContent = '✅ 학습 완료!';
+                        document.getElementById('trainingStatus').innerHTML =
+                            `<p style="color: #00ff88;"><strong>모델 저장 위치:</strong> ${status.modelPath || 'runs/detect/train/weights/best.pt'}</p>`;
+                    } else {
+                        document.getElementById('trainingTitle').textContent = '❌ 학습 실패';
+                    }
+
+                    document.getElementById('stopTrainingBtn').style.display = 'none';
+                    document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+                }
+            } catch (e) {
+                console.error('Status check failed:', e);
+            }
+        }
+
+        async function stopTraining() {
+            if (trainingInterval) {
+                clearInterval(trainingInterval);
+                trainingInterval = null;
+            }
+
+            await fetch('/api/train/stop', { method: 'POST' });
+
+            document.getElementById('trainingTitle').textContent = '⏹ 학습 중지됨';
+            document.getElementById('stopTrainingBtn').style.display = 'none';
+            document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+        }
+
+        function closeTrainingModal() {
+            document.getElementById('trainingModal').classList.remove('show');
+            if (trainingInterval) {
+                clearInterval(trainingInterval);
+                trainingInterval = null;
+            }
+        }
     </script>
 </body>
 </html>
@@ -1011,6 +1131,9 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
             image_name = path.split('/')[-1]
             self.serve_image(image_name)
 
+        elif path == '/api/train/status':
+            self.send_json(self.get_training_status())
+
         else:
             super().do_GET()
 
@@ -1030,6 +1153,12 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
 
         elif path == '/api/export':
             self.handle_export()
+
+        elif path == '/api/train':
+            self.handle_start_training()
+
+        elif path == '/api/train/stop':
+            self.handle_stop_training()
 
         else:
             self.send_error(404)
@@ -1270,6 +1399,135 @@ nc: 1
             'imageCount': image_count,
             'labelCount': label_count
         })
+
+    def handle_start_training(self):
+        global training_state
+
+        if training_state['running']:
+            self.send_json({'success': False, 'error': '이미 학습이 진행 중입니다.'})
+            return
+
+        # Reset state
+        training_state = {
+            'running': True,
+            'process': None,
+            'log': '학습 시작 중...\n',
+            'completed': False,
+            'success': False,
+            'model_path': None
+        }
+
+        # Start training in background thread
+        def run_training():
+            global training_state
+            try:
+                dataset_path = TRAINING_DIR / 'barbell_plate_dataset_new' / 'data.yaml'
+
+                if not dataset_path.exists():
+                    training_state['log'] += f'\n오류: 데이터셋을 찾을 수 없습니다: {dataset_path}\n'
+                    training_state['completed'] = True
+                    training_state['running'] = False
+                    return
+
+                training_state['log'] += f'데이터셋: {dataset_path}\n'
+                training_state['log'] += '모델 로딩 중 (yolov8n.pt)...\n\n'
+
+                # Run training with subprocess
+                cmd = [
+                    'python3', '-c', f'''
+from ultralytics import YOLO
+import sys
+
+model = YOLO("yolov8n.pt")
+print("모델 로드 완료", flush=True)
+print("학습 시작...", flush=True)
+
+results = model.train(
+    data="{dataset_path}",
+    epochs=50,
+    imgsz=320,
+    batch=8,
+    name="barbell_endpoint",
+    patience=10,
+    device="mps",
+    workers=2,
+    verbose=True
+)
+
+print("\\n학습 완료!", flush=True)
+print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
+'''
+                ]
+
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=str(TRAINING_DIR)
+                )
+
+                training_state['process'] = process
+
+                # Read output in real-time
+                for line in iter(process.stdout.readline, ''):
+                    if not training_state['running']:
+                        process.terminate()
+                        break
+                    training_state['log'] += line
+                    # Keep log size manageable
+                    if len(training_state['log']) > 50000:
+                        training_state['log'] = training_state['log'][-40000:]
+
+                process.wait()
+
+                if process.returncode == 0:
+                    training_state['success'] = True
+                    training_state['model_path'] = str(TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint' / 'weights' / 'best.pt')
+                    training_state['log'] += '\n\n✅ 학습이 성공적으로 완료되었습니다!\n'
+                else:
+                    training_state['log'] += f'\n\n❌ 학습 실패 (exit code: {process.returncode})\n'
+
+            except Exception as e:
+                training_state['log'] += f'\n\n오류: {str(e)}\n'
+                training_state['success'] = False
+
+            finally:
+                training_state['running'] = False
+                training_state['completed'] = True
+                training_state['process'] = None
+
+        thread = threading.Thread(target=run_training)
+        thread.daemon = True
+        thread.start()
+
+        self.send_json({'success': True})
+
+    def get_training_status(self):
+        global training_state
+        return {
+            'running': training_state['running'],
+            'completed': training_state['completed'],
+            'success': training_state['success'],
+            'log': training_state['log'],
+            'modelPath': training_state['model_path']
+        }
+
+    def handle_stop_training(self):
+        global training_state
+
+        training_state['running'] = False
+
+        if training_state['process']:
+            try:
+                training_state['process'].terminate()
+            except:
+                pass
+
+        training_state['log'] += '\n\n⏹ 사용자에 의해 학습이 중지되었습니다.\n'
+        training_state['completed'] = True
+
+        self.send_json({'success': True})
 
     def log_message(self, format, *args):
         # Suppress default logging
