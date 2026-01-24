@@ -1,0 +1,25 @@
+name: barbell_tracking_example
+description: "Example app for Barbell Path Camera package."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  barbell_tracking:
+    path: ../barbell_tracking
+  flutter_riverpod: ^2.6.1
+  permission_handler: ^11.0.0
+  ultralytics_yolo: ^0.1.34
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,30 @@
+# Training data and large files
+training/barbell_dataset/
+training/runs/
+training/*.npy
+training/*.zip
+calibration_image_sample_data_20x128x128x3_float32.npy
+
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+*.lock
+
+# iOS
+example/ios/Pods/
+example/ios/.symlinks/
+example/ios/Flutter/Flutter.framework
+example/ios/Flutter/Flutter.podspec
+
+# Android
+example/android/.gradle/
+example/android/app/build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store
