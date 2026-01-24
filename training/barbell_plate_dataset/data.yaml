@@ -1,6 +1,9 @@
-names:
-- barbell_plate_side
-nc: 1
+# Barbell Plate Side Dataset
+path: /Users/seunghwanpark/Desktop/claude_practice/test/barbell_path_camera/training/barbell_plate_dataset
 train: train/images
 val: valid/images
-test: test/images
+
+names:
+  0: barbell_plate_side
+
+nc: 1
