@@ -360,6 +360,99 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .saving {
             animation: pulse 1s infinite;
         }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #00ff88;
+            color: #000;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            max-width: 400px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.error {
+            background: #ff4757;
+            color: #fff;
+        }
+
+        .toast h4 {
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+
+        .toast p {
+            font-size: 0.9rem;
+            margin: 4px 0;
+        }
+
+        .toast code {
+            background: rgba(0,0,0,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #16213e;
+            padding: 32px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            color: #00ff88;
+            margin-bottom: 16px;
+        }
+
+        .modal-content p {
+            margin: 8px 0;
+            color: #ccc;
+        }
+
+        .modal-content code {
+            display: block;
+            background: #1a1a2e;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 12px 0;
+            font-family: monospace;
+            color: #00d9ff;
+            overflow-x: auto;
+        }
+
+        .modal-content .btn {
+            margin-top: 16px;
+        }
     </style>
 </head>
 <body>
@@ -454,6 +547,29 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Toast notification -->
+    <div class="toast" id="toast">
+        <h4 id="toastTitle">알림</h4>
+        <div id="toastContent"></div>
+    </div>
+
+    <!-- Export modal -->
+    <div class="modal" id="exportModal">
+        <div class="modal-content">
+            <h3>✅ 데이터셋 Export 완료!</h3>
+            <p><strong>위치:</strong></p>
+            <code id="exportPath"></code>
+            <p id="exportStats"></p>
+            <p><strong>학습 명령어:</strong></p>
+            <code>cd training && python3 -c "
+from ultralytics import YOLO
+model = YOLO('yolov8n.pt')
+model.train(data='barbell_plate_dataset_new/data.yaml', epochs=100, imgsz=320, device='mps')
+"</code>
+            <button class="btn btn-primary" onclick="closeModal()">확인</button>
+        </div>
+    </div>
+
     <script>
         // State
         let images = [];
@@ -543,10 +659,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
 
         async function loadCrawledImages() {
-            const response = await fetch('/api/load-crawled');
+            showToast('불러오는 중...', '크롤링 이미지를 불러오고 있습니다...');
+            const response = await fetch('/api/load-crawled', { method: 'POST' });
             if (response.ok) {
                 const result = await response.json();
-                alert(`${result.count}개의 크롤링 이미지를 불러왔습니다.`);
+                showToast('불러오기 완료', `${result.count}개의 이미지를 불러왔습니다.`);
                 loadImageList();
             }
         }
@@ -752,10 +869,12 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
 
         function clearLabels() {
-            if (confirm('모든 라벨을 삭제하시겠습니까?')) {
+            if (confirm('현재 이미지의 라벨을 모두 삭제하시겠습니까?')) {
                 currentLabels = [];
                 updateLabelUI();
                 redraw();
+                saveLabels(false);  // 서버에도 저장 (빈 라벨)
+                showToast('삭제 완료', '현재 이미지의 라벨이 삭제되었습니다.');
             }
         }
 
@@ -817,17 +936,49 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
 
         async function exportDataset() {
-            const response = await fetch('/api/export');
-            const result = await response.json();
+            // Show loading toast
+            showToast('Export 중...', '데이터셋을 생성하고 있습니다...', false);
 
-            if (result.success) {
-                alert(`데이터셋 Export 완료!\\n\\n` +
-                      `위치: ${result.path}\\n` +
-                      `이미지: ${result.imageCount}개\\n` +
-                      `라벨: ${result.labelCount}개\\n\\n` +
-                      `학습 명령어:\\n` +
-                      `python3 train_plate_detector.py`);
+            try {
+                const response = await fetch('/api/export', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    // Hide toast
+                    hideToast();
+
+                    // Show modal with details
+                    document.getElementById('exportPath').textContent = result.path;
+                    document.getElementById('exportStats').innerHTML =
+                        `<strong>이미지:</strong> ${result.imageCount}개 | <strong>라벨:</strong> ${result.labelCount}개`;
+                    document.getElementById('exportModal').classList.add('show');
+                } else {
+                    showToast('Export 실패', '오류가 발생했습니다.', true);
+                }
+            } catch (e) {
+                showToast('Export 실패', e.message, true);
             }
+        }
+
+        function showToast(title, content, isError = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastContent').innerHTML = content;
+            toast.classList.toggle('error', isError);
+            toast.classList.add('show');
+
+            if (!isError) {
+                // Auto hide after 3 seconds for non-error
+                setTimeout(hideToast, 3000);
+            }
+        }
+
+        function hideToast() {
+            document.getElementById('toast').classList.remove('show');
+        }
+
+        function closeModal() {
+            document.getElementById('exportModal').classList.remove('show');
         }
     </script>
 </body>
