@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
-import 'dart:ui' as ui;
-import 'dart:math' as math;
-
-late List<dynamic> cameras;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +31,7 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Barbell Path Camera'),
+        title: const Text('바벨 패스 트래커'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Center(
@@ -54,7 +50,7 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'YOLOv8 기반 실시간 바벨 끝단 감지',
+              '바벨 끝단의 이동 경로를 추적합니다',
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 48),
@@ -88,27 +84,10 @@ class HomePage extends StatelessWidget {
 
     if (context.mounted) {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const TrackingPage(),
-        ),
+        MaterialPageRoute(builder: (context) => const TrackingPage()),
       );
     }
   }
-}
-
-/// 바벨 끝단 위치 정보
-class BarbellEndpoint {
-  final Offset position;
-  final double confidence;
-  final Rect boundingBox;
-  final DateTime timestamp;
-
-  BarbellEndpoint({
-    required this.position,
-    required this.confidence,
-    required this.boundingBox,
-    required this.timestamp,
-  });
 }
 
 class TrackingPage extends StatefulWidget {
@@ -119,19 +98,19 @@ class TrackingPage extends StatefulWidget {
 }
 
 class _TrackingPageState extends State<TrackingPage> {
-  // 바벨 끝단 패스 히스토리 (최대 2개 끝단 트래킹)
-  final List<BarbellEndpoint> _leftPathHistory = [];
-  final List<BarbellEndpoint> _rightPathHistory = [];
-  static const int _maxPathPoints = 300;
+  // 바벨 끝단 패스 히스토리
+  final List<Offset> _pathHistory = [];
+  static const int _maxPathPoints = 500;
 
   int _frameCount = 0;
   int _detectionCount = 0;
   bool _isTracking = false;
   bool _showBoundingBox = true;
 
-  // 현재 감지된 바벨 끝단들
-  List<Rect> _currentBoundingBoxes = [];
-  List<Offset> _currentEndpoints = [];
+  // 현재 감지된 바벨 끝단
+  Rect? _currentBox;
+  Offset? _currentEndpoint;
+  double _currentConfidence = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +118,7 @@ class _TrackingPageState extends State<TrackingPage> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // YOLOView로 실시간 감지
+          // 카메라 + YOLO 감지
           Positioned.fill(
             child: YOLOView(
               modelPath: 'barbell_detector',
@@ -148,35 +127,32 @@ class _TrackingPageState extends State<TrackingPage> {
             ),
           ),
 
-          // Bounding Box Overlay (디버깅용)
-          if (_showBoundingBox && _currentBoundingBoxes.isNotEmpty)
+          // Bounding Box 오버레이
+          if (_showBoundingBox && _currentBox != null)
             Positioned.fill(
               child: CustomPaint(
                 painter: BoundingBoxPainter(
-                  boxes: _currentBoundingBoxes,
-                  endpoints: _currentEndpoints,
+                  box: _currentBox!,
+                  endpoint: _currentEndpoint!,
                 ),
               ),
             ),
 
-          // 바벨 패스 Overlay
-          if (_isTracking)
+          // 바벨 패스 오버레이
+          if (_pathHistory.isNotEmpty)
             Positioned.fill(
               child: CustomPaint(
-                painter: BarbellPathPainter(
-                  leftPath: List.from(_leftPathHistory),
-                  rightPath: List.from(_rightPathHistory),
-                ),
+                painter: PathPainter(path: List.from(_pathHistory)),
               ),
             ),
 
-          // Top Bar
+          // 상단 바
           _buildTopBar(),
 
-          // Info Panel
+          // 정보 패널
           _buildInfoPanel(),
 
-          // Bottom Controls
+          // 하단 컨트롤
           _buildBottomControls(),
         ],
       ),
@@ -187,95 +163,58 @@ class _TrackingPageState extends State<TrackingPage> {
     _frameCount++;
 
     if (results.isEmpty) {
-      if (_frameCount % 60 == 0) {
-        debugPrint('프레임 $_frameCount: 감지 없음');
-      }
       setState(() {
-        _currentBoundingBoxes = [];
-        _currentEndpoints = [];
+        _currentBox = null;
+        _currentEndpoint = null;
       });
       return;
     }
 
-    _detectionCount++;
-
-    // 바벨 플레이트 끝단 감지 결과 처리
-    final detectedBoxes = <Rect>[];
-    final detectedEndpoints = <Offset>[];
+    // 가장 신뢰도 높은 바벨 끝단 선택
+    dynamic bestResult;
+    double bestConfidence = 0;
 
     for (final result in results) {
-      // barbell_plate_side 클래스만 필터링
       final className = result.className.toString().toLowerCase();
-      if (!className.contains('barbell') && !className.contains('plate')) {
-        continue;
-      }
-
-      final box = result.boundingBox;
-      final rect = Rect.fromLTRB(
-        box.left.toDouble(),
-        box.top.toDouble(),
-        box.right.toDouble(),
-        box.bottom.toDouble(),
-      );
-
-      // 바운딩 박스의 중심점 = 바벨 끝단 위치
-      final centerX = (box.left + box.right) / 2;
-      final centerY = (box.top + box.bottom) / 2;
-
-      detectedBoxes.add(rect);
-      detectedEndpoints.add(Offset(centerX, centerY));
-
-      if (_frameCount % 30 == 0) {
-        debugPrint('바벨 끝단 감지: ($centerX, $centerY), 신뢰도: ${(result.confidence * 100).toStringAsFixed(1)}%');
+      // barbell 또는 plate 클래스만 필터링
+      if (className.contains('barbell') || className.contains('plate')) {
+        if (result.confidence > bestConfidence) {
+          bestConfidence = result.confidence;
+          bestResult = result;
+        }
       }
     }
 
+    // 필터링된 결과가 없으면 첫 번째 결과 사용
+    bestResult ??= results.first;
+    bestConfidence = bestResult.confidence;
+
+    final box = bestResult.boundingBox;
+    final rect = Rect.fromLTRB(
+      box.left.toDouble(),
+      box.top.toDouble(),
+      box.right.toDouble(),
+      box.bottom.toDouble(),
+    );
+
+    // 바운딩 박스 중심 = 바벨 끝단 위치
+    final centerX = (box.left + box.right) / 2;
+    final centerY = (box.top + box.bottom) / 2;
+    final endpoint = Offset(centerX, centerY);
+
+    _detectionCount++;
+
     setState(() {
-      _currentBoundingBoxes = detectedBoxes;
-      _currentEndpoints = detectedEndpoints;
+      _currentBox = rect;
+      _currentEndpoint = endpoint;
+      _currentConfidence = bestConfidence;
     });
 
     // 트래킹 중일 때만 패스 기록
-    if (_isTracking && detectedEndpoints.isNotEmpty) {
-      _recordPath(detectedEndpoints);
-    }
-  }
-
-  void _recordPath(List<Offset> endpoints) {
-    final now = DateTime.now();
-
-    // X 좌표 기준으로 왼쪽/오른쪽 끝단 분류
-    endpoints.sort((a, b) => a.dx.compareTo(b.dx));
-
-    if (endpoints.isNotEmpty) {
-      // 가장 왼쪽 끝단
-      final leftEndpoint = BarbellEndpoint(
-        position: endpoints.first,
-        confidence: 1.0,
-        boundingBox: _currentBoundingBoxes.isNotEmpty
-            ? _currentBoundingBoxes.first
-            : Rect.zero,
-        timestamp: now,
-      );
-      _leftPathHistory.add(leftEndpoint);
-      if (_leftPathHistory.length > _maxPathPoints) {
-        _leftPathHistory.removeAt(0);
-      }
-    }
-
-    if (endpoints.length >= 2) {
-      // 가장 오른쪽 끝단
-      final rightEndpoint = BarbellEndpoint(
-        position: endpoints.last,
-        confidence: 1.0,
-        boundingBox: _currentBoundingBoxes.isNotEmpty
-            ? _currentBoundingBoxes.last
-            : Rect.zero,
-        timestamp: now,
-      );
-      _rightPathHistory.add(rightEndpoint);
-      if (_rightPathHistory.length > _maxPathPoints) {
-        _rightPathHistory.removeAt(0);
+    if (_isTracking) {
+      _pathHistory.add(endpoint);
+      if (_pathHistory.length > _maxPathPoints) {
+        _pathHistory.removeAt(0);
       }
     }
   }
@@ -293,25 +232,25 @@ class _TrackingPageState extends State<TrackingPage> {
             icon: const Icon(Icons.arrow_back, color: Colors.white),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(8),
+              color: _isTracking ? Colors.green.withOpacity(0.8) : Colors.black54,
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
               children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: _isTracking ? Colors.green : Colors.orange,
-                    shape: BoxShape.circle,
-                  ),
+                Icon(
+                  _isTracking ? Icons.fiber_manual_record : Icons.pause,
+                  color: _isTracking ? Colors.white : Colors.orange,
+                  size: 16,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _isTracking ? '바패스 트래킹 중' : '대기',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  _isTracking ? 'REC' : '대기',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -331,40 +270,32 @@ class _TrackingPageState extends State<TrackingPage> {
   Widget _buildInfoPanel() {
     return Positioned(
       right: 16,
-      top: MediaQuery.of(context).padding.top + 60,
+      top: MediaQuery.of(context).padding.top + 70,
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              '프레임: $_frameCount',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            Text(
-              '감지: $_detectionCount',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const Divider(color: Colors.white24, height: 16),
-            Text(
-              '왼쪽 패스: ${_leftPathHistory.length}',
-              style: const TextStyle(color: Colors.cyan, fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '오른쪽 패스: ${_rightPathHistory.length}',
-              style: const TextStyle(color: Colors.orange, fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            if (_currentEndpoints.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                '현재 끝단: ${_currentEndpoints.length}개',
-                style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
+              '패스: ${_pathHistory.length}',
+              style: const TextStyle(
+                color: Colors.cyan,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-            ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '신뢰도: ${(_currentConfidence * 100).toStringAsFixed(0)}%',
+              style: TextStyle(
+                color: _currentConfidence > 0.7 ? Colors.green : Colors.orange,
+                fontSize: 14,
+              ),
+            ),
           ],
         ),
       ),
@@ -373,189 +304,185 @@ class _TrackingPageState extends State<TrackingPage> {
 
   Widget _buildBottomControls() {
     return Positioned(
-      bottom: 24 + MediaQuery.of(context).padding.bottom,
+      bottom: 40 + MediaQuery.of(context).padding.bottom,
       left: 0,
       right: 0,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (!_isTracking)
-            ElevatedButton.icon(
-              onPressed: () => setState(() {
-                _isTracking = true;
-                _leftPathHistory.clear();
-                _rightPathHistory.clear();
-                _frameCount = 0;
-                _detectionCount = 0;
-              }),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          // 트래킹 시작/정지 버튼
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                if (_isTracking) {
+                  _isTracking = false;
+                } else {
+                  _isTracking = true;
+                  _pathHistory.clear();
+                }
+              });
+            },
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _isTracking ? Colors.red : Colors.green,
+                boxShadow: [
+                  BoxShadow(
+                    color: (_isTracking ? Colors.red : Colors.green).withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
               ),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('트래킹 시작'),
-            ),
-          if (_isTracking) ...[
-            ElevatedButton.icon(
-              onPressed: () => setState(() => _isTracking = false),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: Icon(
+                _isTracking ? Icons.stop : Icons.play_arrow,
+                color: Colors.white,
+                size: 40,
               ),
-              icon: const Icon(Icons.stop),
-              label: const Text('정지'),
             ),
-            const SizedBox(width: 16),
-            ElevatedButton.icon(
-              onPressed: () => setState(() {
-                _leftPathHistory.clear();
-                _rightPathHistory.clear();
-              }),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+          const SizedBox(width: 32),
+          // 초기화 버튼
+          GestureDetector(
+            onTap: () => setState(() => _pathHistory.clear()),
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey[800],
               ),
-              icon: const Icon(Icons.refresh),
-              label: const Text('초기화'),
+              child: const Icon(
+                Icons.refresh,
+                color: Colors.white,
+                size: 30,
+              ),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// 바운딩 박스 Painter (디버깅용)
+/// 바운딩 박스 Painter
 class BoundingBoxPainter extends CustomPainter {
-  final List<Rect> boxes;
-  final List<Offset> endpoints;
+  final Rect box;
+  final Offset endpoint;
 
-  BoundingBoxPainter({required this.boxes, required this.endpoints});
+  BoundingBoxPainter({required this.box, required this.endpoint});
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 바운딩 박스
     final boxPaint = Paint()
       ..color = Colors.greenAccent
-      ..strokeWidth = 2.0
+      ..strokeWidth = 3.0
       ..style = PaintingStyle.stroke;
 
-    final endpointPaint = Paint()
+    final rect = Rect.fromLTRB(
+      box.left * size.width,
+      box.top * size.height,
+      box.right * size.width,
+      box.bottom * size.height,
+    );
+    canvas.drawRect(rect, boxPaint);
+
+    // 끝단 마커 (십자선)
+    final point = Offset(
+      endpoint.dx * size.width,
+      endpoint.dy * size.height,
+    );
+
+    final markerPaint = Paint()
+      ..color = Colors.red
+      ..strokeWidth = 3.0;
+
+    // 십자선
+    canvas.drawLine(
+      Offset(point.dx - 20, point.dy),
+      Offset(point.dx + 20, point.dy),
+      markerPaint,
+    );
+    canvas.drawLine(
+      Offset(point.dx, point.dy - 20),
+      Offset(point.dx, point.dy + 20),
+      markerPaint,
+    );
+
+    // 중심점
+    final centerPaint = Paint()
       ..color = Colors.red
       ..style = PaintingStyle.fill;
-
-    for (final box in boxes) {
-      // 정규화된 좌표를 실제 화면 좌표로 변환
-      final rect = Rect.fromLTRB(
-        box.left * size.width,
-        box.top * size.height,
-        box.right * size.width,
-        box.bottom * size.height,
-      );
-      canvas.drawRect(rect, boxPaint);
-    }
-
-    for (final point in endpoints) {
-      final screenPoint = Offset(
-        point.dx * size.width,
-        point.dy * size.height,
-      );
-      canvas.drawCircle(screenPoint, 8, endpointPaint);
-
-      // 십자선
-      final crossPaint = Paint()
-        ..color = Colors.white
-        ..strokeWidth = 2;
-      canvas.drawLine(
-        Offset(screenPoint.dx - 12, screenPoint.dy),
-        Offset(screenPoint.dx + 12, screenPoint.dy),
-        crossPaint,
-      );
-      canvas.drawLine(
-        Offset(screenPoint.dx, screenPoint.dy - 12),
-        Offset(screenPoint.dx, screenPoint.dy + 12),
-        crossPaint,
-      );
-    }
+    canvas.drawCircle(point, 6, centerPaint);
   }
 
   @override
   bool shouldRepaint(covariant BoundingBoxPainter oldDelegate) => true;
 }
 
-/// 바벨 패스 Painter
-class BarbellPathPainter extends CustomPainter {
-  final List<BarbellEndpoint> leftPath;
-  final List<BarbellEndpoint> rightPath;
+/// 패스 Painter
+class PathPainter extends CustomPainter {
+  final List<Offset> path;
 
-  BarbellPathPainter({required this.leftPath, required this.rightPath});
+  PathPainter({required this.path});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 왼쪽 끝단 패스 (cyan)
-    _drawPath(canvas, size, leftPath, Colors.cyan);
-
-    // 오른쪽 끝단 패스 (orange)
-    _drawPath(canvas, size, rightPath, Colors.orange);
-  }
-
-  void _drawPath(Canvas canvas, Size size, List<BarbellEndpoint> path, Color color) {
     if (path.length < 2) return;
 
-    final pathPaint = Paint()
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
+    // 패스 라인
     for (int i = 1; i < path.length; i++) {
-      final startPoint = Offset(
-        path[i - 1].position.dx * size.width,
-        path[i - 1].position.dy * size.height,
+      final start = Offset(
+        path[i - 1].dx * size.width,
+        path[i - 1].dy * size.height,
       );
-      final endPoint = Offset(
-        path[i].position.dx * size.width,
-        path[i].position.dy * size.height,
+      final end = Offset(
+        path[i].dx * size.width,
+        path[i].dy * size.height,
       );
 
-      // 그라데이션 효과: 최근 포인트일수록 밝게
-      final opacity = (i / path.length).clamp(0.2, 1.0);
-      pathPaint.color = color.withValues(alpha: opacity);
+      // 그라데이션 효과
+      final progress = i / path.length;
+      final paint = Paint()
+        ..color = Colors.cyan.withOpacity(0.3 + progress * 0.7)
+        ..strokeWidth = 2 + progress * 4
+        ..strokeCap = StrokeCap.round;
 
-      canvas.drawLine(startPoint, endPoint, pathPaint);
+      canvas.drawLine(start, end, paint);
     }
 
-    // 현재 위치에 포인트 표시
+    // 현재 위치 표시
     if (path.isNotEmpty) {
-      final lastPoint = Offset(
-        path.last.position.dx * size.width,
-        path.last.position.dy * size.height,
+      final current = Offset(
+        path.last.dx * size.width,
+        path.last.dy * size.height,
       );
 
-      // 글로우 효과
+      // 글로우
       final glowPaint = Paint()
-        ..color = color.withValues(alpha: 0.3)
+        ..color = Colors.cyan.withOpacity(0.3)
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(lastPoint, 20, glowPaint);
+      canvas.drawCircle(current, 25, glowPaint);
 
-      // 메인 포인트
-      final centerPaint = Paint()
-        ..color = color
+      // 메인 원
+      final mainPaint = Paint()
+        ..color = Colors.cyan
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(lastPoint, 10, centerPaint);
+      canvas.drawCircle(current, 12, mainPaint);
 
-      // 흰색 내부
+      // 내부 흰색
       final innerPaint = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(lastPoint, 4, innerPaint);
+      canvas.drawCircle(current, 5, innerPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant BarbellPathPainter oldDelegate) {
-    return leftPath.length != oldDelegate.leftPath.length ||
-           rightPath.length != oldDelegate.rightPath.length;
+  bool shouldRepaint(covariant PathPainter oldDelegate) {
+    return path.length != oldDelegate.path.length;
   }
 }
