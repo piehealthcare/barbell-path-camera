@@ -1003,11 +1003,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
 
         async function selectImage(index) {
-            // Save current labels before switching (autoNext=false로 무한루프 방지)
-            if (currentIndex >= 0 && currentLabels.length > 0) {
-                await saveLabels(false, false);
-            }
-
+            // 이미지 전환 시 자동 저장 안함 - 사용자가 명시적으로 저장 버튼 눌러야 함
             currentIndex = index;
             const img = images[index];
 
