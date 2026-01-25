@@ -51,6 +51,16 @@ auto_label_state = {
     'log': ''
 }
 
+# Claude 라벨링 상태
+claude_label_state = {
+    'running': False,
+    'completed': False,
+    'total': 0,
+    'processed': 0,
+    'labeled': 0,
+    'log': ''
+}
+
 # 라벨 메타데이터 (수동/자동 구분)
 LABEL_META_FILE = LABELS_DIR / '_metadata.json'
 
@@ -199,6 +209,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             border-left: 3px solid #9b59b6;
         }
 
+        .image-item.claude-labeled {
+            border-left: 3px solid #e67e22;
+        }
+
         .label-badge {
             font-size: 0.6rem;
             padding: 2px 4px;
@@ -213,6 +227,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         .label-badge.auto {
             background: #9b59b6;
+            color: #fff;
+        }
+
+        .label-badge.claude {
+            background: #e67e22;
             color: #fff;
         }
 
@@ -523,11 +542,15 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             </div>
             <div class="stat">
                 <div class="stat-value" id="manualLabeled" style="color: #00ff88;">0</div>
-                <div class="stat-label">수동 라벨</div>
+                <div class="stat-label">수동</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="autoLabeled" style="color: #9b59b6;">0</div>
-                <div class="stat-label">자동 라벨</div>
+                <div class="stat-label">YOLO</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="claudeLabeled" style="color: #e67e22;">0</div>
+                <div class="stat-label">Claude</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="totalLabels">0</div>
@@ -580,7 +603,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     🚀 학습
                 </button>
                 <button class="btn btn-success" onclick="autoLabel()" style="background: #9b59b6;">
-                    🤖 자동 라벨링
+                    🤖 YOLO 자동
+                </button>
+                <button class="btn btn-success" onclick="claudeLabel()" style="background: #e67e22;">
+                    🧠 Claude AI
                 </button>
 
                 <div class="navigation">
@@ -764,6 +790,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             document.getElementById('totalImages').textContent = data.total;
             document.getElementById('manualLabeled').textContent = data.manualLabeled || 0;
             document.getElementById('autoLabeled').textContent = data.autoLabeled || 0;
+            document.getElementById('claudeLabeled').textContent = data.claudeLabeled || 0;
             document.getElementById('totalLabels').textContent = data.totalLabels;
 
             const progress = data.total > 0 ? (data.labeled / data.total * 100) : 0;
@@ -785,7 +812,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 if (img.labelCount > 0) {
                     if (img.labelType === 'auto') {
                         labelClass = 'auto-labeled';
-                        badge = `<span class="label-badge auto">자동</span>`;
+                        badge = `<span class="label-badge auto">YOLO</span>`;
+                    } else if (img.labelType === 'claude') {
+                        labelClass = 'claude-labeled';
+                        badge = `<span class="label-badge claude">Claude</span>`;
                     } else {
                         labelClass = 'labeled';
                         badge = `<span class="label-badge manual">수동</span>`;
@@ -1241,6 +1271,112 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 console.error('Status check failed:', e);
             }
         }
+
+        // Claude AI Labeling
+        let claudeLabelInterval = null;
+
+        async function claudeLabel() {
+            // Check for API key first
+            let apiKey = localStorage.getItem('anthropic_api_key');
+
+            if (!apiKey) {
+                apiKey = prompt('Anthropic API 키를 입력하세요:\\n(https://console.anthropic.com 에서 발급)');
+                if (!apiKey) return;
+                localStorage.setItem('anthropic_api_key', apiKey);
+            }
+
+            // Options: current image or all unlabeled
+            const choice = confirm('현재 이미지만 라벨링할까요?\\n\\n확인 = 현재 이미지만\\n취소 = 라벨 없는 이미지 전체');
+
+            if (choice && currentIndex < 0) {
+                showToast('오류', '먼저 이미지를 선택하세요.', true);
+                return;
+            }
+
+            // Show modal
+            document.getElementById('trainingModal').classList.add('show');
+            document.getElementById('trainingTitle').textContent = '🧠 Claude AI 라벨링 중...';
+            document.getElementById('trainingStatus').innerHTML = '<p>Claude가 이미지를 분석하고 있습니다...</p>';
+            document.getElementById('trainingLog').textContent = 'Claude API 연결 중...\\n';
+            document.getElementById('stopTrainingBtn').style.display = 'inline-block';
+            document.getElementById('closeTrainingBtn').style.display = 'none';
+
+            try {
+                const endpoint = choice ? '/api/claude-label/single' : '/api/claude-label/batch';
+                const body = choice
+                    ? { imageName: images[currentIndex].name, apiKey }
+                    : { apiKey };
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (choice) {
+                        // Single image - show result immediately
+                        document.getElementById('trainingLog').textContent = result.log || 'Claude 분석 완료';
+                        document.getElementById('trainingTitle').textContent = '✅ Claude 라벨링 완료!';
+                        document.getElementById('trainingStatus').innerHTML =
+                            `<p style="color: #00ff88;">${result.labelCount || 0}개 라벨 생성</p>`;
+                        document.getElementById('stopTrainingBtn').style.display = 'none';
+                        document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+
+                        // Reload current image labels
+                        loadLabels(images[currentIndex].name);
+                        loadImageList();
+                    } else {
+                        // Batch - poll for status
+                        claudeLabelInterval = setInterval(checkClaudeLabelStatus, 2000);
+                    }
+                } else {
+                    document.getElementById('trainingLog').textContent = `오류: ${result.error}`;
+                    if (result.error.includes('API')) {
+                        localStorage.removeItem('anthropic_api_key');
+                    }
+                    document.getElementById('stopTrainingBtn').style.display = 'none';
+                    document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+                }
+            } catch (e) {
+                document.getElementById('trainingLog').textContent = `오류: ${e.message}`;
+                document.getElementById('stopTrainingBtn').style.display = 'none';
+                document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+            }
+        }
+
+        async function checkClaudeLabelStatus() {
+            try {
+                const res = await fetch('/api/claude-label/status');
+                const status = await res.json();
+
+                document.getElementById('trainingLog').textContent = status.log || '처리 중...';
+                document.getElementById('trainingStatus').innerHTML =
+                    `<p>진행: ${status.processed}/${status.total} (${status.labeled}개 라벨 생성)</p>`;
+
+                const logDiv = document.getElementById('trainingLog').parentElement;
+                logDiv.scrollTop = logDiv.scrollHeight;
+
+                if (status.completed) {
+                    clearInterval(claudeLabelInterval);
+                    claudeLabelInterval = null;
+
+                    document.getElementById('trainingTitle').textContent = '✅ Claude 라벨링 완료!';
+                    document.getElementById('trainingStatus').innerHTML =
+                        `<p style="color: #00ff88;"><strong>${status.labeled}개</strong> 라벨이 생성되었습니다.</p>
+                         <p style="color: #e67e22;">Claude AI가 분석한 라벨입니다.</p>`;
+
+                    document.getElementById('stopTrainingBtn').style.display = 'none';
+                    document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+
+                    loadImageList();
+                }
+            } catch (e) {
+                console.error('Status check failed:', e);
+            }
+        }
     </script>
 </body>
 </html>
@@ -1278,6 +1414,9 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/auto-label/status':
             self.send_json(self.get_auto_label_status())
 
+        elif path == '/api/claude-label/status':
+            self.send_json(self.get_claude_label_status())
+
         else:
             super().do_GET()
 
@@ -1310,6 +1449,15 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/auto-label/stop':
             self.handle_stop_auto_label()
 
+        elif path == '/api/claude-label/single':
+            self.handle_claude_label_single()
+
+        elif path == '/api/claude-label/batch':
+            self.handle_claude_label_batch()
+
+        elif path == '/api/claude-label/stop':
+            self.handle_stop_claude_label()
+
         else:
             self.send_error(404)
 
@@ -1328,6 +1476,7 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
         labeled_count = 0
         manual_count = 0
         auto_count = 0
+        claude_count = 0
 
         # Load metadata
         meta = load_label_metadata()
@@ -1356,6 +1505,8 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
                     labeled_count += 1
                     if label_type == 'auto':
                         auto_count += 1
+                    elif label_type == 'claude':
+                        claude_count += 1
                     else:
                         manual_count += 1
 
@@ -1365,6 +1516,7 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
             'labeled': labeled_count,
             'manualLabeled': manual_count,
             'autoLabeled': auto_count,
+            'claudeLabeled': claude_count,
             'totalLabels': total_labels
         }
 
@@ -1822,6 +1974,292 @@ print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
     def handle_stop_auto_label(self):
         global auto_label_state
         auto_label_state['running'] = False
+        self.send_json({'success': True})
+
+    def handle_claude_label_single(self):
+        """Claude API로 단일 이미지 라벨링"""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length)
+        data = json.loads(body)
+
+        image_name = data.get('imageName')
+        api_key = data.get('apiKey')
+
+        if not image_name or not api_key:
+            self.send_json({'success': False, 'error': '이미지 이름과 API 키가 필요합니다.'})
+            return
+
+        image_path = IMAGES_DIR / image_name
+
+        if not image_path.exists():
+            self.send_json({'success': False, 'error': f'이미지를 찾을 수 없습니다: {image_name}'})
+            return
+
+        try:
+            import anthropic
+            import base64
+
+            # Read and encode image
+            with open(image_path, 'rb') as f:
+                image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+
+            # Determine media type
+            suffix = image_path.suffix.lower()
+            media_type = 'image/jpeg' if suffix in ['.jpg', '.jpeg'] else 'image/png'
+
+            # Call Claude API
+            client = anthropic.Anthropic(api_key=api_key)
+
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": image_data
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": """이 이미지에서 바벨(barbell) 플레이트의 끝단(옆면, 원형 부분)을 찾아주세요.
+
+바벨 플레이트 끝단은 바벨의 양쪽 끝에 있는 원형 무게판의 옆면입니다.
+
+각 끝단에 대해 바운딩 박스 좌표를 다음 형식으로 반환해주세요:
+- cx: 중심 x좌표 (0~1, 이미지 너비 기준)
+- cy: 중심 y좌표 (0~1, 이미지 높이 기준)
+- w: 너비 (0~1)
+- h: 높이 (0~1)
+
+JSON 형식으로만 응답해주세요:
+{"labels": [{"cx": 0.2, "cy": 0.5, "w": 0.1, "h": 0.15}, ...]}
+
+바벨이 보이지 않으면: {"labels": []}"""
+                        }
+                    ]
+                }]
+            )
+
+            # Parse response
+            response_text = message.content[0].text
+            log = f"Claude 응답:\n{response_text}\n"
+
+            # Extract JSON from response
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+
+            if json_match:
+                result = json.loads(json_match.group())
+                labels = result.get('labels', [])
+
+                # Save labels
+                LABELS_DIR.mkdir(exist_ok=True)
+                stem = image_path.stem
+                label_path = LABELS_DIR / f'{stem}.txt'
+
+                with open(label_path, 'w') as f:
+                    for label in labels:
+                        cx = label.get('cx', 0)
+                        cy = label.get('cy', 0)
+                        w = label.get('w', 0.05)
+                        h = label.get('h', 0.05)
+                        f.write(f'0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
+
+                # Mark as claude label
+                meta = load_label_metadata()
+                meta[stem] = 'claude'
+                save_label_metadata(meta)
+
+                log += f"\n✅ {len(labels)}개 라벨 저장됨"
+
+                self.send_json({
+                    'success': True,
+                    'labelCount': len(labels),
+                    'log': log
+                })
+            else:
+                self.send_json({
+                    'success': False,
+                    'error': 'Claude 응답에서 JSON을 파싱할 수 없습니다.',
+                    'log': log
+                })
+
+        except ImportError:
+            self.send_json({
+                'success': False,
+                'error': 'anthropic 패키지가 설치되지 않았습니다. pip install anthropic'
+            })
+        except Exception as e:
+            self.send_json({
+                'success': False,
+                'error': str(e)
+            })
+
+    def handle_claude_label_batch(self):
+        """Claude API로 여러 이미지 일괄 라벨링"""
+        global claude_label_state
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length)
+        data = json.loads(body)
+
+        api_key = data.get('apiKey')
+
+        if not api_key:
+            self.send_json({'success': False, 'error': 'API 키가 필요합니다.'})
+            return
+
+        if claude_label_state['running']:
+            self.send_json({'success': False, 'error': '이미 Claude 라벨링이 진행 중입니다.'})
+            return
+
+        # Get unlabeled images
+        unlabeled = []
+        for f in IMAGES_DIR.glob('*'):
+            if f.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                label_path = LABELS_DIR / f'{f.stem}.txt'
+                if not label_path.exists():
+                    unlabeled.append(f)
+
+        if not unlabeled:
+            self.send_json({'success': False, 'error': '라벨링되지 않은 이미지가 없습니다.'})
+            return
+
+        # Limit to prevent API overuse
+        max_images = min(len(unlabeled), 50)
+        unlabeled = unlabeled[:max_images]
+
+        # Reset state
+        claude_label_state = {
+            'running': True,
+            'completed': False,
+            'total': len(unlabeled),
+            'processed': 0,
+            'labeled': 0,
+            'log': f'Claude AI 라벨링 시작\n총 {len(unlabeled)}개 이미지 (최대 50개)\n\n'
+        }
+
+        # Run in background
+        def run_claude_label():
+            global claude_label_state
+            try:
+                import anthropic
+                import base64
+
+                client = anthropic.Anthropic(api_key=api_key)
+                claude_label_state['log'] += 'API 연결 성공\n\n'
+
+                LABELS_DIR.mkdir(exist_ok=True)
+
+                for i, img_path in enumerate(unlabeled):
+                    if not claude_label_state['running']:
+                        claude_label_state['log'] += '\n⏹ 사용자에 의해 중지됨\n'
+                        break
+
+                    try:
+                        # Read and encode image
+                        with open(img_path, 'rb') as f:
+                            image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+
+                        suffix = img_path.suffix.lower()
+                        media_type = 'image/jpeg' if suffix in ['.jpg', '.jpeg'] else 'image/png'
+
+                        # Call Claude
+                        message = client.messages.create(
+                            model="claude-sonnet-4-20250514",
+                            max_tokens=512,
+                            messages=[{
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": media_type,
+                                            "data": image_data
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": """바벨 플레이트 끝단(원형 옆면)의 바운딩 박스 좌표를 JSON으로 반환하세요.
+형식: {"labels": [{"cx": 0.2, "cy": 0.5, "w": 0.1, "h": 0.15}]}
+바벨이 없으면: {"labels": []}
+JSON만 응답하세요."""
+                                    }
+                                ]
+                            }]
+                        )
+
+                        response_text = message.content[0].text
+
+                        # Parse JSON
+                        import re
+                        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+
+                        label_count = 0
+                        if json_match:
+                            result = json.loads(json_match.group())
+                            labels = result.get('labels', [])
+
+                            # Save labels
+                            label_path = LABELS_DIR / f'{img_path.stem}.txt'
+                            with open(label_path, 'w') as f:
+                                for label in labels:
+                                    cx = label.get('cx', 0)
+                                    cy = label.get('cy', 0)
+                                    w = label.get('w', 0.05)
+                                    h = label.get('h', 0.05)
+                                    f.write(f'0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
+                                    label_count += 1
+                                    claude_label_state['labeled'] += 1
+
+                            # Mark as claude
+                            if label_count > 0:
+                                meta = load_label_metadata()
+                                meta[img_path.stem] = 'claude'
+                                save_label_metadata(meta)
+
+                        claude_label_state['processed'] = i + 1
+                        claude_label_state['log'] += f'[{i+1}/{len(unlabeled)}] {img_path.name}: {label_count}개\n'
+
+                    except Exception as e:
+                        claude_label_state['log'] += f'[{i+1}/{len(unlabeled)}] {img_path.name}: 오류 - {str(e)[:50]}\n'
+                        claude_label_state['processed'] = i + 1
+
+                claude_label_state['log'] += f'\n\n✅ 완료! {claude_label_state["labeled"]}개 라벨 생성\n'
+
+            except Exception as e:
+                claude_label_state['log'] += f'\n\n❌ 오류: {str(e)}\n'
+
+            finally:
+                claude_label_state['running'] = False
+                claude_label_state['completed'] = True
+
+        thread = threading.Thread(target=run_claude_label)
+        thread.daemon = True
+        thread.start()
+
+        self.send_json({'success': True})
+
+    def get_claude_label_status(self):
+        global claude_label_state
+        return {
+            'running': claude_label_state['running'],
+            'completed': claude_label_state['completed'],
+            'total': claude_label_state['total'],
+            'processed': claude_label_state['processed'],
+            'labeled': claude_label_state['labeled'],
+            'log': claude_label_state['log']
+        }
+
+    def handle_stop_claude_label(self):
+        global claude_label_state
+        claude_label_state['running'] = False
         self.send_json({'success': True})
 
     def log_message(self, format, *args):
