@@ -102,7 +102,6 @@ class _TrackingPageState extends State<TrackingPage> {
   final List<Offset> _pathHistory = [];
   static const int _maxPathPoints = 500;
 
-  int _frameCount = 0;
   int _detectionCount = 0;
   bool _isTracking = false;
   bool _showBoundingBox = true;
@@ -118,31 +117,31 @@ class _TrackingPageState extends State<TrackingPage> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 카메라 + YOLO 감지
+          // YOLO 카메라 프리뷰
           Positioned.fill(
             child: YOLOView(
-              modelPath: 'barbell_detector',
+              modelPath: 'barbell_endpoint.mlpackage',
               task: YOLOTask.detect,
+              showNativeUI: false,
+              showOverlays: _showBoundingBox,
+              confidenceThreshold: 0.3,
               onResult: _handleDetectionResult,
             ),
           ),
-
-          // Bounding Box 오버레이
-          if (_showBoundingBox && _currentBox != null)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: BoundingBoxPainter(
-                  box: _currentBox!,
-                  endpoint: _currentEndpoint!,
-                ),
-              ),
-            ),
 
           // 바벨 패스 오버레이
           if (_pathHistory.isNotEmpty)
             Positioned.fill(
               child: CustomPaint(
                 painter: PathPainter(path: List.from(_pathHistory)),
+              ),
+            ),
+
+          // 현재 위치 마커
+          if (_currentEndpoint != null)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: EndpointPainter(endpoint: _currentEndpoint!),
               ),
             ),
 
@@ -159,9 +158,7 @@ class _TrackingPageState extends State<TrackingPage> {
     );
   }
 
-  void _handleDetectionResult(List<dynamic> results) {
-    _frameCount++;
-
+  void _handleDetectionResult(List<YOLOResult> results) {
     if (results.isEmpty) {
       setState(() {
         _currentBox = null;
@@ -170,51 +167,38 @@ class _TrackingPageState extends State<TrackingPage> {
       return;
     }
 
-    // 가장 신뢰도 높은 바벨 끝단 선택
-    dynamic bestResult;
-    double bestConfidence = 0;
+    // 가장 신뢰도 높은 결과 선택
+    YOLOResult? best;
+    double bestConf = 0;
 
     for (final result in results) {
-      final className = result.className.toString().toLowerCase();
-      // barbell 또는 plate 클래스만 필터링
-      if (className.contains('barbell') || className.contains('plate')) {
-        if (result.confidence > bestConfidence) {
-          bestConfidence = result.confidence;
-          bestResult = result;
-        }
+      if (result.confidence > bestConf) {
+        bestConf = result.confidence;
+        best = result;
       }
     }
 
-    // 필터링된 결과가 없으면 첫 번째 결과 사용
-    bestResult ??= results.first;
-    bestConfidence = bestResult.confidence;
+    if (best != null) {
+      final box = best.normalizedBox;
 
-    final box = bestResult.boundingBox;
-    final rect = Rect.fromLTRB(
-      box.left.toDouble(),
-      box.top.toDouble(),
-      box.right.toDouble(),
-      box.bottom.toDouble(),
-    );
+      final centerX = (box.left + box.right) / 2;
+      final centerY = (box.top + box.bottom) / 2;
+      final endpoint = Offset(centerX, centerY);
 
-    // 바운딩 박스 중심 = 바벨 끝단 위치
-    final centerX = (box.left + box.right) / 2;
-    final centerY = (box.top + box.bottom) / 2;
-    final endpoint = Offset(centerX, centerY);
+      _detectionCount++;
 
-    _detectionCount++;
+      setState(() {
+        _currentBox = box;
+        _currentEndpoint = endpoint;
+        _currentConfidence = bestConf;
+      });
 
-    setState(() {
-      _currentBox = rect;
-      _currentEndpoint = endpoint;
-      _currentConfidence = bestConfidence;
-    });
-
-    // 트래킹 중일 때만 패스 기록
-    if (_isTracking) {
-      _pathHistory.add(endpoint);
-      if (_pathHistory.length > _maxPathPoints) {
-        _pathHistory.removeAt(0);
+      // 트래킹 중일 때만 패스 기록
+      if (_isTracking) {
+        _pathHistory.add(endpoint);
+        if (_pathHistory.length > _maxPathPoints) {
+          _pathHistory.removeAt(0);
+        }
       }
     }
   }
@@ -367,40 +351,24 @@ class _TrackingPageState extends State<TrackingPage> {
   }
 }
 
-/// 바운딩 박스 Painter
-class BoundingBoxPainter extends CustomPainter {
-  final Rect box;
+/// 현재 위치 마커 Painter
+class EndpointPainter extends CustomPainter {
   final Offset endpoint;
 
-  BoundingBoxPainter({required this.box, required this.endpoint});
+  EndpointPainter({required this.endpoint});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 바운딩 박스
-    final boxPaint = Paint()
-      ..color = Colors.greenAccent
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke;
-
-    final rect = Rect.fromLTRB(
-      box.left * size.width,
-      box.top * size.height,
-      box.right * size.width,
-      box.bottom * size.height,
-    );
-    canvas.drawRect(rect, boxPaint);
-
-    // 끝단 마커 (십자선)
     final point = Offset(
       endpoint.dx * size.width,
       endpoint.dy * size.height,
     );
 
+    // 십자선
     final markerPaint = Paint()
       ..color = Colors.red
       ..strokeWidth = 3.0;
 
-    // 십자선
     canvas.drawLine(
       Offset(point.dx - 20, point.dy),
       Offset(point.dx + 20, point.dy),
@@ -416,11 +384,11 @@ class BoundingBoxPainter extends CustomPainter {
     final centerPaint = Paint()
       ..color = Colors.red
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(point, 6, centerPaint);
+    canvas.drawCircle(point, 8, centerPaint);
   }
 
   @override
-  bool shouldRepaint(covariant BoundingBoxPainter oldDelegate) => true;
+  bool shouldRepaint(covariant EndpointPainter oldDelegate) => true;
 }
 
 /// 패스 Painter

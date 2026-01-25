@@ -22,7 +22,7 @@ import shutil
 import base64
 
 # 설정
-PORT = 8080
+PORT = 8085
 TRAINING_DIR = Path(__file__).parent
 IMAGES_DIR = TRAINING_DIR / "labeling_images"
 LABELS_DIR = TRAINING_DIR / "labeling_labels"
@@ -213,6 +213,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             border-left: 3px solid #e67e22;
         }
 
+        .image-item.selected {
+            background: #3a1c1c !important;
+            border: 2px solid #ff4444 !important;
+        }
+
         .label-badge {
             font-size: 0.6rem;
             padding: 2px 4px;
@@ -319,6 +324,28 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         .btn-success:hover {
             background: #00dd77;
+        }
+
+        .filter-btn {
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            background: transparent;
+            border: 1px solid #444;
+            color: #888;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .filter-btn.active {
+            background: #444;
+            color: #fff;
+            border-color: #666;
         }
 
         .canvas-wrapper {
@@ -575,6 +602,24 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             </div>
 
             <h3>🖼️ 이미지 목록</h3>
+            <div style="display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap;">
+                <button class="filter-btn active" onclick="setFilter('all')" id="filter-all">전체</button>
+                <button class="filter-btn" onclick="setFilter('claude')" id="filter-claude" style="border-color: #e67e22;">🧠 Claude</button>
+                <button class="filter-btn" onclick="setFilter('manual')" id="filter-manual" style="border-color: #00ff88;">✋ 수동</button>
+                <button class="filter-btn" onclick="setFilter('auto')" id="filter-auto" style="border-color: #9b59b6;">🤖 YOLO</button>
+                <button class="filter-btn" onclick="setFilter('unlabeled')" id="filter-unlabeled">⬜ 미라벨</button>
+            </div>
+
+            <!-- 다중 선택 컨트롤 -->
+            <div id="multiSelectControls" style="display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; align-items: center;">
+                <label style="color: #888; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                    <input type="checkbox" id="multiSelectMode" onchange="toggleMultiSelect()"> 다중선택
+                </label>
+                <button class="filter-btn" onclick="selectAllVisible()" id="selectAllBtn" style="display: none;">전체선택</button>
+                <button class="filter-btn" onclick="deselectAll()" id="deselectBtn" style="display: none;">선택해제</button>
+                <button class="filter-btn" onclick="deleteSelected()" id="deleteSelectedBtn" style="display: none; background: #ff4444; border-color: #ff4444; color: white;">🗑️ 삭제 (<span id="selectedCount">0</span>)</button>
+            </div>
+
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill" style="width: 0%"></div>
             </div>
@@ -599,8 +644,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 <button class="btn btn-success" onclick="exportDataset()">
                     📦 Export
                 </button>
-                <button class="btn btn-success" onclick="startTraining()" style="background: #ff6b6b;">
-                    🚀 학습
+                <button class="btn btn-success" onclick="startTraining(false)" style="background: #ff6b6b;">
+                    🚀 이어서 학습
+                </button>
+                <button class="btn btn-success" onclick="startTraining(true)" style="background: #e74c3c;">
+                    🆕 새로 학습
                 </button>
                 <button class="btn btn-success" onclick="autoLabel()" style="background: #9b59b6;">
                     🤖 YOLO 자동
@@ -686,6 +734,104 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         let currentImage = null;
         let scale = 1;
         let offsetX = 0, offsetY = 0;
+        let currentFilter = 'all';
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            // Update button states
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('filter-' + filter).classList.add('active');
+            renderImageList();
+        }
+
+        function getFilteredImages() {
+            if (currentFilter === 'all') return images;
+            return images.filter(img => {
+                if (currentFilter === 'claude') return img.labelType === 'claude';
+                if (currentFilter === 'manual') return img.labelType === 'manual' || (img.labelCount > 0 && !img.labelType);
+                if (currentFilter === 'auto') return img.labelType === 'auto';
+                if (currentFilter === 'unlabeled') return img.labelCount === 0;
+                return true;
+            });
+        }
+
+        // 다중 선택 상태
+        let multiSelectMode = false;
+        let selectedImages = new Set();
+
+        function toggleMultiSelect() {
+            multiSelectMode = document.getElementById('multiSelectMode').checked;
+            document.getElementById('selectAllBtn').style.display = multiSelectMode ? 'inline-block' : 'none';
+            document.getElementById('deselectBtn').style.display = multiSelectMode ? 'inline-block' : 'none';
+            document.getElementById('deleteSelectedBtn').style.display = multiSelectMode ? 'inline-block' : 'none';
+            if (!multiSelectMode) {
+                selectedImages.clear();
+            }
+            renderImageList();
+        }
+
+        async function toggleImageSelection(imageName, realIndex, event) {
+            if (event) event.stopPropagation();
+
+            // 선택 상태 토글
+            if (selectedImages.has(imageName)) {
+                selectedImages.delete(imageName);
+            } else {
+                selectedImages.add(imageName);
+            }
+            updateSelectedCount();
+
+            // 이미지 미리보기 표시 (메인 캔버스에 로드)
+            await selectImage(realIndex);
+        }
+
+        function selectAllVisible() {
+            const filtered = getFilteredImages();
+            filtered.forEach(img => selectedImages.add(img.name));
+            updateSelectedCount();
+            renderImageList();
+        }
+
+        function deselectAll() {
+            selectedImages.clear();
+            updateSelectedCount();
+            renderImageList();
+        }
+
+        function updateSelectedCount() {
+            document.getElementById('selectedCount').textContent = selectedImages.size;
+        }
+
+        async function deleteSelected() {
+            if (selectedImages.size === 0) {
+                alert('선택된 이미지가 없습니다.');
+                return;
+            }
+
+            if (!confirm(`${selectedImages.size}개의 라벨을 삭제하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/delete-labels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ images: Array.from(selectedImages) })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(`${result.deleted}개 라벨 삭제됨`);
+                    selectedImages.clear();
+                    updateSelectedCount();
+                    loadImageList();
+                } else {
+                    alert('삭제 실패: ' + result.error);
+                }
+            } catch (e) {
+                alert('삭제 중 오류: ' + e.message);
+            }
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -799,13 +945,15 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         function renderImageList() {
             const container = document.getElementById('imageList');
+            const filtered = getFilteredImages();
 
-            if (images.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div>이미지를 업로드하세요</div></div>';
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div>해당 필터에 맞는 이미지가 없습니다</div></div>';
                 return;
             }
 
-            container.innerHTML = images.map((img, i) => {
+            container.innerHTML = filtered.map((img, i) => {
+                const realIndex = images.indexOf(img);
                 let labelClass = '';
                 let badge = '';
 
@@ -822,20 +970,42 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     }
                 }
 
+                const isSelected = selectedImages.has(img.name);
+                const checkbox = multiSelectMode ?
+                    `<input type="checkbox" class="multi-checkbox" ${isSelected ? 'checked' : ''}
+                     onclick="toggleImageSelection('${img.name}', ${realIndex}, event)"
+                     style="position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; z-index: 10;">` : '';
+
                 return `
-                <div class="image-item ${i === currentIndex ? 'active' : ''} ${labelClass}"
-                     onclick="selectImage(${i})">
+                <div class="image-item ${realIndex === currentIndex ? 'active' : ''} ${labelClass} ${isSelected ? 'selected' : ''}"
+                     onclick="${multiSelectMode ? `toggleImageSelection('${img.name}', ${realIndex}, event)` : `selectImage(${realIndex})`}"
+                     style="position: relative;">
+                    ${checkbox}
                     <img class="image-thumb" src="/images/${img.name}" alt="">
                     <span class="image-name">${img.name}</span>
                     ${img.labelCount > 0 ? `<span class="label-count">${img.labelCount}</span>${badge}` : ''}
                 </div>
             `}).join('');
+
+            // Update filter counts
+            const counts = {
+                all: images.length,
+                claude: images.filter(i => i.labelType === 'claude').length,
+                manual: images.filter(i => i.labelType === 'manual' || (i.labelCount > 0 && !i.labelType)).length,
+                auto: images.filter(i => i.labelType === 'auto').length,
+                unlabeled: images.filter(i => i.labelCount === 0).length
+            };
+            document.getElementById('filter-all').textContent = `전체 (${counts.all})`;
+            document.getElementById('filter-claude').textContent = `🧠 Claude (${counts.claude})`;
+            document.getElementById('filter-manual').textContent = `✋ 수동 (${counts.manual})`;
+            document.getElementById('filter-auto').textContent = `🤖 YOLO (${counts.auto})`;
+            document.getElementById('filter-unlabeled').textContent = `⬜ 미라벨 (${counts.unlabeled})`;
         }
 
         async function selectImage(index) {
-            // Save current labels before switching
+            // Save current labels before switching (autoNext=false로 무한루프 방지)
             if (currentIndex >= 0 && currentLabels.length > 0) {
-                await saveLabels(false);
+                await saveLabels(false, false);
             }
 
             currentIndex = index;
@@ -997,7 +1167,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 currentLabels = [];
                 updateLabelUI();
                 redraw();
-                saveLabels(false);  // 서버에도 저장 (빈 라벨)
+                saveLabels(false, false);  // 서버에도 저장 (빈 라벨, 다음으로 안넘어감)
                 showToast('삭제 완료', '현재 이미지의 라벨이 삭제되었습니다.');
             }
         }
@@ -1025,10 +1195,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             `).join('');
         }
 
-        async function saveLabels(showAlert = true) {
+        async function saveLabels(showAlert = true, autoNext = true) {
             if (currentIndex < 0) return;
 
             const imageName = images[currentIndex].name;
+            const savedIndex = currentIndex;
 
             const response = await fetch(`/api/labels/${imageName}`, {
                 method: 'POST',
@@ -1043,7 +1214,12 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     btn.classList.add('saving');
                     setTimeout(() => btn.classList.remove('saving'), 500);
                 }
-                loadImageList();
+                await loadImageList();
+
+                // 저장 후 다음 이미지로 자동 이동
+                if (autoNext && savedIndex < images.length - 1) {
+                    await selectImage(savedIndex + 1);
+                }
             }
         }
 
@@ -1107,7 +1283,13 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         let trainingInterval = null;
 
-        async function startTraining() {
+        async function startTraining(freshStart = false) {
+            const mode = freshStart ? '새로 학습' : '이어서 학습';
+            if (!confirm(`${mode}을 시작하시겠습니까?\\n\\n` +
+                (freshStart ? '⚠️ 기본 모델(yolov8n.pt)에서 처음부터 학습합니다.' : '✅ 기존 학습 모델에서 이어서 학습합니다.'))) {
+                return;
+            }
+
             // First export the dataset
             showToast('준비 중...', '데이터셋 Export 후 학습을 시작합니다...');
 
@@ -1124,13 +1306,17 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
                 // Show training modal
                 document.getElementById('trainingModal').classList.add('show');
-                document.getElementById('trainingTitle').textContent = '🚀 모델 학습 중...';
-                document.getElementById('trainingLog').textContent = `데이터셋: ${exportResult.imageCount}개 이미지, ${exportResult.labelCount}개 라벨\\n\\n학습 시작 중...\\n`;
+                document.getElementById('trainingTitle').textContent = freshStart ? '🆕 새로 학습 중...' : '🚀 이어서 학습 중...';
+                document.getElementById('trainingLog').textContent = `데이터셋: ${exportResult.imageCount}개 이미지, ${exportResult.labelCount}개 라벨\\n모드: ${mode}\\n\\n학습 시작 중...\\n`;
                 document.getElementById('stopTrainingBtn').style.display = 'inline-block';
                 document.getElementById('closeTrainingBtn').style.display = 'none';
 
-                // Start training
-                const trainRes = await fetch('/api/train', { method: 'POST' });
+                // Start training with fresh parameter
+                const trainRes = await fetch('/api/train', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fresh: freshStart })
+                });
                 const trainResult = await trainRes.json();
 
                 if (trainResult.success) {
@@ -1458,6 +1644,9 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/claude-label/stop':
             self.handle_stop_claude_label()
 
+        elif path == '/api/delete-labels':
+            self.handle_delete_labels()
+
         else:
             self.send_error(404)
 
@@ -1492,7 +1681,12 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
                         label_count = len([l for l in lf.readlines() if l.strip()])
 
                     if label_count > 0:
-                        label_type = meta.get(f.stem, 'manual')  # Default to manual for existing labels
+                        meta_val = meta.get(f.stem, 'manual')
+                        # Handle both string and dict formats
+                        if isinstance(meta_val, dict):
+                            label_type = meta_val.get('type', 'manual')
+                        else:
+                            label_type = meta_val
 
                 images.append({
                     'name': f.name,
@@ -1730,11 +1924,24 @@ nc: 1
             self.send_json({'success': False, 'error': '이미 학습이 진행 중입니다.'})
             return
 
+        # Parse request body
+        fresh_start = False
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data.decode('utf-8'))
+                fresh_start = data.get('fresh', False)
+        except:
+            pass
+
+        mode_text = "🆕 새로 학습" if fresh_start else "🚀 이어서 학습"
+
         # Reset state
         training_state = {
             'running': True,
             'process': None,
-            'log': '학습 시작 중...\n',
+            'log': f'{mode_text} 시작 중...\n',
             'completed': False,
             'success': False,
             'model_path': None
@@ -1753,28 +1960,49 @@ nc: 1
                     return
 
                 training_state['log'] += f'데이터셋: {dataset_path}\n'
-                training_state['log'] += '모델 로딩 중 (yolov8n.pt)...\n\n'
 
-                # Run training with subprocess
+                # 모델 선택
+                base_model = "yolov8n.pt"  # 기본값
+
+                if not fresh_start:
+                    # 기존 학습 모델 찾기 (이어서 학습용)
+                    runs_dir = TRAINING_DIR / 'runs' / 'detect'
+                    if runs_dir.exists():
+                        endpoint_dirs = sorted([d for d in runs_dir.iterdir()
+                                              if d.is_dir() and d.name.startswith('barbell_endpoint')],
+                                             key=lambda x: x.stat().st_mtime, reverse=True)
+                        for d in endpoint_dirs:
+                            best_pt = d / 'weights' / 'best.pt'
+                            if best_pt.exists():
+                                base_model = str(best_pt)
+                                break
+
+                if base_model == "yolov8n.pt":
+                    model_msg = "기본 모델(yolov8n.pt)에서 새로 학습"
+                else:
+                    model_msg = f"기존 모델에서 이어서 학습: {Path(base_model).parent.parent.name}"
+                training_state['log'] += f'{model_msg}\n\n'
+
                 cmd = [
                     'python3', '-c', f'''
 from ultralytics import YOLO
 import sys
 
-model = YOLO("yolov8n.pt")
-print("모델 로드 완료", flush=True)
+model = YOLO("{base_model}")
+print("모델 로드 완료: {base_model}", flush=True)
 print("학습 시작...", flush=True)
 
 results = model.train(
     data="{dataset_path}",
-    epochs=50,
+    epochs=30,
     imgsz=320,
     batch=8,
     name="barbell_endpoint",
     patience=10,
     device="mps",
     workers=2,
-    verbose=True
+    verbose=True,
+    resume=False
 )
 
 print("\\n학습 완료!", flush=True)
@@ -1805,9 +2033,44 @@ print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
                 process.wait()
 
                 if process.returncode == 0:
+                    # 최신 학습 모델 찾기
+                    latest_model = None
+                    runs_dir = TRAINING_DIR / 'runs' / 'detect'
+                    if runs_dir.exists():
+                        endpoint_dirs = sorted([d for d in runs_dir.iterdir()
+                                              if d.is_dir() and d.name.startswith('barbell_endpoint')],
+                                             key=lambda x: x.stat().st_mtime, reverse=True)
+                        for d in endpoint_dirs:
+                            best_pt = d / 'weights' / 'best.pt'
+                            if best_pt.exists():
+                                latest_model = best_pt
+                                break
+
                     training_state['success'] = True
-                    training_state['model_path'] = str(TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint' / 'weights' / 'best.pt')
+                    training_state['model_path'] = str(latest_model) if latest_model else None
                     training_state['log'] += '\n\n✅ 학습이 성공적으로 완료되었습니다!\n'
+
+                    # CoreML 변환 및 iOS 앱에 복사
+                    if latest_model:
+                        training_state['log'] += '\n📱 CoreML 변환 중...\n'
+                        try:
+                            from ultralytics import YOLO
+                            model = YOLO(str(latest_model))
+                            export_path = model.export(format='coreml', nms=True)
+                            training_state['log'] += f'CoreML 변환 완료: {export_path}\n'
+
+                            # iOS 앱에 복사
+                            ios_model_path = TRAINING_DIR.parent / 'example' / 'ios' / 'Runner' / 'barbell_endpoint.mlpackage'
+                            if Path(export_path).exists():
+                                import shutil
+                                if ios_model_path.exists():
+                                    shutil.rmtree(ios_model_path)
+                                shutil.copytree(export_path, ios_model_path)
+                                training_state['log'] += f'✅ iOS 앱에 모델 복사 완료!\n'
+                                training_state['log'] += f'   경로: {ios_model_path}\n'
+                                training_state['log'] += f'\n⚠️ 앱을 다시 빌드해야 새 모델이 적용됩니다.\n'
+                        except Exception as e:
+                            training_state['log'] += f'CoreML 변환 실패: {str(e)}\n'
                 else:
                     training_state['log'] += f'\n\n❌ 학습 실패 (exit code: {process.returncode})\n'
 
@@ -1859,18 +2122,19 @@ print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
             self.send_json({'success': False, 'error': '이미 자동 라벨링이 진행 중입니다.'})
             return
 
-        # Find best model
-        model_paths = [
-            TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint_v3' / 'weights' / 'best.pt',
-            TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint_v2' / 'weights' / 'best.pt',
-            TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint' / 'weights' / 'best.pt',
-        ]
-
+        # Find latest trained model
         model_path = None
-        for p in model_paths:
-            if p.exists():
-                model_path = p
-                break
+        runs_dir = TRAINING_DIR / 'runs' / 'detect'
+        if runs_dir.exists():
+            # barbell_endpoint로 시작하는 폴더 중 가장 최근 것 찾기
+            endpoint_dirs = sorted([d for d in runs_dir.iterdir()
+                                  if d.is_dir() and d.name.startswith('barbell_endpoint')],
+                                 key=lambda x: x.stat().st_mtime, reverse=True)
+            for d in endpoint_dirs:
+                best_pt = d / 'weights' / 'best.pt'
+                if best_pt.exists():
+                    model_path = best_pt
+                    break
 
         if not model_path:
             self.send_json({'success': False, 'error': '학습된 모델이 없습니다. 먼저 학습을 진행하세요.'})
@@ -2261,6 +2525,35 @@ JSON만 응답하세요."""
         global claude_label_state
         claude_label_state['running'] = False
         self.send_json({'success': True})
+
+    def handle_delete_labels(self):
+        """다중 라벨 삭제"""
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+
+            image_names = data.get('images', [])
+            meta = load_label_metadata()
+
+            deleted = 0
+            for name in image_names:
+                # 확장자 제거
+                stem = Path(name).stem if '.' in name else name
+                label_path = LABELS_DIR / f'{stem}.txt'
+                if label_path.exists():
+                    label_path.unlink()
+                    deleted += 1
+                # 메타데이터에서도 삭제
+                if stem in meta:
+                    del meta[stem]
+
+            save_label_metadata(meta)
+
+            self.send_json({'success': True, 'deleted': deleted})
+
+        except Exception as e:
+            self.send_json({'success': False, 'error': str(e)})
 
     def log_message(self, format, *args):
         # Suppress default logging
