@@ -26,7 +26,13 @@ PORT = 8085
 TRAINING_DIR = Path(__file__).parent
 IMAGES_DIR = TRAINING_DIR / "labeling_images"
 LABELS_DIR = TRAINING_DIR / "labeling_labels"
-CLASS_NAME = "barbell_plate_side"
+
+# 멀티 클래스 지원
+CLASS_NAMES = {
+    0: "barbell_endpoint",   # 바벨 끝단 (플레이트 측면)
+    1: "barbell"             # 바벨 전체 (막대 + 플레이트)
+}
+CLASS_NAME = "barbell_endpoint"  # 기본값 (하위 호환)
 
 # 학습 상태 (전역)
 import subprocess
@@ -657,6 +663,14 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     🧠 Claude AI
                 </button>
 
+                <div style="display: flex; align-items: center; gap: 8px; margin-left: 20px; padding: 4px 12px; background: #2d2d2d; border-radius: 4px;">
+                    <span style="color: #888; font-size: 12px;">클래스:</span>
+                    <select id="classSelector" onchange="changeClass()" style="background: #3d3d3d; color: white; border: 1px solid #555; padding: 4px 8px; border-radius: 4px; font-size: 13px;">
+                        <option value="0" style="color: #00ff88;">🎯 바벨 끝단</option>
+                        <option value="1" style="color: #ff6b6b;">📏 바벨 전체</option>
+                    </select>
+                </div>
+
                 <div class="navigation">
                     <button class="btn btn-secondary" onclick="prevImage()">
                         ◀ 이전 <span class="shortcut-hint">(A)</span>
@@ -735,6 +749,22 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         let scale = 1;
         let offsetX = 0, offsetY = 0;
         let currentFilter = 'all';
+        let currentClass = 0;  // 0: 바벨 끝단, 1: 바벨 전체
+
+        const CLASS_COLORS = {
+            0: '#00ff88',  // 바벨 끝단 - 녹색
+            1: '#ff6b6b'   // 바벨 전체 - 빨강
+        };
+
+        const CLASS_NAMES = {
+            0: '바벨 끝단',
+            1: '바벨 전체'
+        };
+
+        function changeClass() {
+            currentClass = parseInt(document.getElementById('classSelector').value);
+            redraw();  // 현재 그리기 색상 반영
+        }
 
         function setFilter(filter) {
             currentFilter = filter;
@@ -1058,8 +1088,13 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 const w = label.w * canvas.width;
                 const h = label.h * canvas.height;
 
+                // 클래스별 색상
+                const classId = label.classId || 0;
+                const color = CLASS_COLORS[classId] || '#00ff88';
+                const className = CLASS_NAMES[classId] || '알 수 없음';
+
                 // Box
-                ctx.strokeStyle = '#00ff88';
+                ctx.strokeStyle = color;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x, y, w, h);
 
@@ -1082,10 +1117,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 ctx.lineTo(cx, cy + 15);
                 ctx.stroke();
 
-                // Label number
-                ctx.fillStyle = '#00ff88';
+                // Label number + class name
+                ctx.fillStyle = color;
                 ctx.font = 'bold 14px sans-serif';
-                ctx.fillText(`#${i + 1}`, x + 4, y - 4);
+                ctx.fillText(`#${i + 1} ${className}`, x + 4, y - 4);
             });
         }
 
@@ -1139,6 +1174,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             }
 
             const label = {
+                classId: currentClass,
                 cx: (x1 + x2) / 2,
                 cy: (y1 + y2) / 2,
                 w: x2 - x1,
@@ -1183,12 +1219,16 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 return;
             }
 
-            container.innerHTML = currentLabels.map((label, i) => `
+            container.innerHTML = currentLabels.map((label, i) => {
+                const classId = label.classId || 0;
+                const color = CLASS_COLORS[classId] || '#00ff88';
+                const className = CLASS_NAMES[classId] || '알 수 없음';
+                return `
                 <div class="label-item">
-                    <span>#${i + 1}: (${(label.cx * 100).toFixed(1)}%, ${(label.cy * 100).toFixed(1)}%)</span>
+                    <span style="color: ${color};">#${i + 1} [${className}]</span>
                     <span class="delete-label" onclick="deleteLabel(${i})">✕</span>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         async function saveLabels(showAlert = true, autoNext = true) {
@@ -1720,8 +1760,9 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) >= 5:
-                        _, cx, cy, w, h = parts[:5]
+                        class_id, cx, cy, w, h = parts[:5]
                         labels.append({
+                            'classId': int(class_id),
                             'cx': float(cx),
                             'cy': float(cy),
                             'w': float(w),
@@ -1822,11 +1863,12 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
 
         with open(label_path, 'w') as f:
             for label in data.get('labels', []):
+                class_id = label.get('classId', 0)  # 기본값: 0 (바벨 끝단)
                 cx = label['cx']
                 cy = label['cy']
                 w = label['w']
                 h = label['h']
-                f.write(f'0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
+                f.write(f'{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
 
         # Mark as manual label
         meta = load_label_metadata()
@@ -1888,7 +1930,7 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
                 label_count += len([l for l in f.readlines() if l.strip()])
 
         # Create data.yaml
-        yaml_content = f"""# Barbell Plate Side Dataset
+        yaml_content = f"""# Barbell Dataset (Multi-class)
 # Generated by labeling_server.py
 # Total images: {image_count} (train: {len(train_set)}, valid: {len(valid_set)})
 # Total labels: {label_count}
@@ -1898,9 +1940,10 @@ train: train/images
 val: valid/images
 
 names:
-  0: {CLASS_NAME}
+  0: barbell_endpoint
+  1: barbell
 
-nc: 1
+nc: 2
 """
         (dataset_dir / 'data.yaml').write_text(yaml_content)
 
