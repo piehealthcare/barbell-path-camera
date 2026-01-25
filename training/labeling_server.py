@@ -41,6 +41,16 @@ training_state = {
     'model_path': None
 }
 
+# 자동 라벨링 상태
+auto_label_state = {
+    'running': False,
+    'completed': False,
+    'total': 0,
+    'processed': 0,
+    'labeled': 0,
+    'log': ''
+}
+
 # HTML 템플릿
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ko">
@@ -528,7 +538,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     📦 Export
                 </button>
                 <button class="btn btn-success" onclick="startTraining()" style="background: #ff6b6b;">
-                    🚀 학습 시작
+                    🚀 학습
+                </button>
+                <button class="btn btn-success" onclick="autoLabel()" style="background: #9b59b6;">
+                    🤖 자동 라벨링
                 </button>
 
                 <div class="navigation">
@@ -1100,6 +1113,80 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 trainingInterval = null;
             }
         }
+
+        // Auto-labeling
+        let autoLabelInterval = null;
+
+        async function autoLabel() {
+            const unlabeledCount = images.filter(img => img.labelCount === 0).length;
+
+            if (unlabeledCount === 0) {
+                showToast('알림', '라벨링되지 않은 이미지가 없습니다.', false);
+                return;
+            }
+
+            if (!confirm(`${unlabeledCount}개의 이미지를 자동 라벨링하시겠습니까?\\n\\n학습된 모델을 사용하여 바벨 끝단을 자동으로 감지합니다.`)) {
+                return;
+            }
+
+            // Show training modal for progress
+            document.getElementById('trainingModal').classList.add('show');
+            document.getElementById('trainingTitle').textContent = '🤖 자동 라벨링 중...';
+            document.getElementById('trainingStatus').innerHTML = `<p>총 ${unlabeledCount}개 이미지 처리 중...</p>`;
+            document.getElementById('trainingLog').textContent = '자동 라벨링 시작...\\n';
+            document.getElementById('stopTrainingBtn').style.display = 'inline-block';
+            document.getElementById('closeTrainingBtn').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/auto-label', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    // Poll for status
+                    autoLabelInterval = setInterval(checkAutoLabelStatus, 1000);
+                } else {
+                    document.getElementById('trainingLog').textContent += `\\n오류: ${result.error}`;
+                    document.getElementById('stopTrainingBtn').style.display = 'none';
+                    document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+                }
+            } catch (e) {
+                showToast('오류', e.message, true);
+                closeTrainingModal();
+            }
+        }
+
+        async function checkAutoLabelStatus() {
+            try {
+                const res = await fetch('/api/auto-label/status');
+                const status = await res.json();
+
+                document.getElementById('trainingLog').textContent = status.log || '처리 중...';
+                document.getElementById('trainingStatus').innerHTML =
+                    `<p>진행: ${status.processed}/${status.total} (${status.labeled}개 라벨 생성)</p>`;
+
+                // Auto-scroll
+                const logDiv = document.getElementById('trainingLog').parentElement;
+                logDiv.scrollTop = logDiv.scrollHeight;
+
+                if (status.completed) {
+                    clearInterval(autoLabelInterval);
+                    autoLabelInterval = null;
+
+                    document.getElementById('trainingTitle').textContent = '✅ 자동 라벨링 완료!';
+                    document.getElementById('trainingStatus').innerHTML =
+                        `<p style="color: #00ff88;"><strong>${status.labeled}개</strong> 라벨이 생성되었습니다.</p>
+                         <p style="color: #ffaa00;">⚠️ 자동 생성된 라벨을 검토하세요!</p>`;
+
+                    document.getElementById('stopTrainingBtn').style.display = 'none';
+                    document.getElementById('closeTrainingBtn').style.display = 'inline-block';
+
+                    // Refresh image list
+                    loadImageList();
+                }
+            } catch (e) {
+                console.error('Status check failed:', e);
+            }
+        }
     </script>
 </body>
 </html>
@@ -1134,6 +1221,9 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/train/status':
             self.send_json(self.get_training_status())
 
+        elif path == '/api/auto-label/status':
+            self.send_json(self.get_auto_label_status())
+
         else:
             super().do_GET()
 
@@ -1159,6 +1249,12 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
 
         elif path == '/api/train/stop':
             self.handle_stop_training()
+
+        elif path == '/api/auto-label':
+            self.handle_start_auto_label()
+
+        elif path == '/api/auto-label/stop':
+            self.handle_stop_auto_label()
 
         else:
             self.send_error(404)
@@ -1527,6 +1623,124 @@ print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
         training_state['log'] += '\n\n⏹ 사용자에 의해 학습이 중지되었습니다.\n'
         training_state['completed'] = True
 
+        self.send_json({'success': True})
+
+    def handle_start_auto_label(self):
+        global auto_label_state
+
+        if auto_label_state['running']:
+            self.send_json({'success': False, 'error': '이미 자동 라벨링이 진행 중입니다.'})
+            return
+
+        # Find best model
+        model_paths = [
+            TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint_v3' / 'weights' / 'best.pt',
+            TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint_v2' / 'weights' / 'best.pt',
+            TRAINING_DIR / 'runs' / 'detect' / 'barbell_endpoint' / 'weights' / 'best.pt',
+        ]
+
+        model_path = None
+        for p in model_paths:
+            if p.exists():
+                model_path = p
+                break
+
+        if not model_path:
+            self.send_json({'success': False, 'error': '학습된 모델이 없습니다. 먼저 학습을 진행하세요.'})
+            return
+
+        # Get unlabeled images
+        unlabeled = []
+        for f in IMAGES_DIR.glob('*'):
+            if f.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                label_path = LABELS_DIR / f'{f.stem}.txt'
+                if not label_path.exists():
+                    unlabeled.append(f)
+
+        if not unlabeled:
+            self.send_json({'success': False, 'error': '라벨링되지 않은 이미지가 없습니다.'})
+            return
+
+        # Reset state
+        auto_label_state = {
+            'running': True,
+            'completed': False,
+            'total': len(unlabeled),
+            'processed': 0,
+            'labeled': 0,
+            'log': f'모델: {model_path.name}\n총 {len(unlabeled)}개 이미지 처리 예정\n\n'
+        }
+
+        # Run in background thread
+        def run_auto_label():
+            global auto_label_state
+            try:
+                from ultralytics import YOLO
+                model = YOLO(str(model_path))
+                auto_label_state['log'] += '모델 로드 완료\n\n'
+
+                LABELS_DIR.mkdir(exist_ok=True)
+
+                for i, img_path in enumerate(unlabeled):
+                    if not auto_label_state['running']:
+                        auto_label_state['log'] += '\n⏹ 사용자에 의해 중지됨\n'
+                        break
+
+                    # Predict
+                    results = model(str(img_path), verbose=False, conf=0.3)
+
+                    # Save labels
+                    label_path = LABELS_DIR / f'{img_path.stem}.txt'
+                    label_count = 0
+
+                    with open(label_path, 'w') as f:
+                        for result in results:
+                            if result.boxes is not None:
+                                for box in result.boxes:
+                                    # Get normalized coordinates
+                                    x1, y1, x2, y2 = box.xyxyn[0].tolist()
+                                    cx = (x1 + x2) / 2
+                                    cy = (y1 + y2) / 2
+                                    w = x2 - x1
+                                    h = y2 - y1
+                                    conf = box.conf[0].item()
+
+                                    f.write(f'0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
+                                    label_count += 1
+                                    auto_label_state['labeled'] += 1
+
+                    auto_label_state['processed'] = i + 1
+                    auto_label_state['log'] += f'[{i+1}/{len(unlabeled)}] {img_path.name}: {label_count}개 감지\n'
+
+                auto_label_state['log'] += f'\n\n✅ 완료! {auto_label_state["labeled"]}개 라벨 생성\n'
+
+            except Exception as e:
+                auto_label_state['log'] += f'\n\n❌ 오류: {str(e)}\n'
+
+            finally:
+                auto_label_state['running'] = False
+                auto_label_state['completed'] = True
+
+        thread = threading.Thread(target=run_auto_label)
+        thread.daemon = True
+        thread.start()
+
+        self.send_json({'success': True})
+
+    def get_auto_label_status(self):
+        global auto_label_state
+        return {
+            'running': auto_label_state['running'],
+            'completed': auto_label_state['completed'],
+            'total': auto_label_state['total'],
+            'processed': auto_label_state['processed'],
+            'labeled': auto_label_state['labeled'],
+            'log': auto_label_state['log']
+        }
+
+    def handle_stop_auto_label(self):
+        global auto_label_state
+        auto_label_state['running'] = False
         self.send_json({'success': True})
 
     def log_message(self, format, *args):
