@@ -51,6 +51,20 @@ auto_label_state = {
     'log': ''
 }
 
+# 라벨 메타데이터 (수동/자동 구분)
+LABEL_META_FILE = LABELS_DIR / '_metadata.json'
+
+def load_label_metadata():
+    if LABEL_META_FILE.exists():
+        with open(LABEL_META_FILE) as f:
+            return json.load(f)
+    return {}
+
+def save_label_metadata(meta):
+    LABELS_DIR.mkdir(exist_ok=True)
+    with open(LABEL_META_FILE, 'w') as f:
+        json.dump(meta, f, indent=2)
+
 # HTML 템플릿
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ko">
@@ -179,6 +193,27 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         .image-item.labeled {
             border-left: 3px solid #00ff88;
+        }
+
+        .image-item.auto-labeled {
+            border-left: 3px solid #9b59b6;
+        }
+
+        .label-badge {
+            font-size: 0.6rem;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-left: 4px;
+        }
+
+        .label-badge.manual {
+            background: #00ff88;
+            color: #000;
+        }
+
+        .label-badge.auto {
+            background: #9b59b6;
+            color: #fff;
         }
 
         .image-thumb {
@@ -487,8 +522,12 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 <div class="stat-label">전체 이미지</div>
             </div>
             <div class="stat">
-                <div class="stat-value" id="labeledImages">0</div>
-                <div class="stat-label">라벨링 완료</div>
+                <div class="stat-value" id="manualLabeled" style="color: #00ff88;">0</div>
+                <div class="stat-label">수동 라벨</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="autoLabeled" style="color: #9b59b6;">0</div>
+                <div class="stat-label">자동 라벨</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="totalLabels">0</div>
@@ -723,7 +762,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         function updateStats(data) {
             document.getElementById('totalImages').textContent = data.total;
-            document.getElementById('labeledImages').textContent = data.labeled;
+            document.getElementById('manualLabeled').textContent = data.manualLabeled || 0;
+            document.getElementById('autoLabeled').textContent = data.autoLabeled || 0;
             document.getElementById('totalLabels').textContent = data.totalLabels;
 
             const progress = data.total > 0 ? (data.labeled / data.total * 100) : 0;
@@ -738,14 +778,28 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 return;
             }
 
-            container.innerHTML = images.map((img, i) => `
-                <div class="image-item ${i === currentIndex ? 'active' : ''} ${img.labelCount > 0 ? 'labeled' : ''}"
+            container.innerHTML = images.map((img, i) => {
+                let labelClass = '';
+                let badge = '';
+
+                if (img.labelCount > 0) {
+                    if (img.labelType === 'auto') {
+                        labelClass = 'auto-labeled';
+                        badge = `<span class="label-badge auto">자동</span>`;
+                    } else {
+                        labelClass = 'labeled';
+                        badge = `<span class="label-badge manual">수동</span>`;
+                    }
+                }
+
+                return `
+                <div class="image-item ${i === currentIndex ? 'active' : ''} ${labelClass}"
                      onclick="selectImage(${i})">
                     <img class="image-thumb" src="/images/${img.name}" alt="">
                     <span class="image-name">${img.name}</span>
-                    ${img.labelCount > 0 ? `<span class="label-count">${img.labelCount}</span>` : ''}
+                    ${img.labelCount > 0 ? `<span class="label-count">${img.labelCount}</span>${badge}` : ''}
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         async function selectImage(index) {
@@ -1272,29 +1326,45 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
         images = []
         total_labels = 0
         labeled_count = 0
+        manual_count = 0
+        auto_count = 0
+
+        # Load metadata
+        meta = load_label_metadata()
 
         for f in sorted(IMAGES_DIR.glob('*')):
             if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.webp']:
                 label_path = LABELS_DIR / f'{f.stem}.txt'
                 label_count = 0
+                label_type = None  # 'manual', 'auto', or None
 
                 if label_path.exists():
                     with open(label_path) as lf:
                         label_count = len([l for l in lf.readlines() if l.strip()])
 
+                    if label_count > 0:
+                        label_type = meta.get(f.stem, 'manual')  # Default to manual for existing labels
+
                 images.append({
                     'name': f.name,
-                    'labelCount': label_count
+                    'labelCount': label_count,
+                    'labelType': label_type
                 })
 
                 total_labels += label_count
                 if label_count > 0:
                     labeled_count += 1
+                    if label_type == 'auto':
+                        auto_count += 1
+                    else:
+                        manual_count += 1
 
         return {
             'images': images,
             'total': len(images),
             'labeled': labeled_count,
+            'manualLabeled': manual_count,
+            'autoLabeled': auto_count,
             'totalLabels': total_labels
         }
 
@@ -1415,6 +1485,11 @@ class LabelingHandler(http.server.SimpleHTTPRequestHandler):
                 w = label['w']
                 h = label['h']
                 f.write(f'0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
+
+        # Mark as manual label
+        meta = load_label_metadata()
+        meta[stem] = 'manual'
+        save_label_metadata(meta)
 
         self.send_json({'success': True})
 
@@ -1708,6 +1783,12 @@ print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
                                     f.write(f'0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n')
                                     label_count += 1
                                     auto_label_state['labeled'] += 1
+
+                    # Mark as auto label
+                    if label_count > 0:
+                        meta = load_label_metadata()
+                        meta[img_path.stem] = 'auto'
+                        save_label_metadata(meta)
 
                     auto_label_state['processed'] = i + 1
                     auto_label_state['log'] += f'[{i+1}/{len(unlabeled)}] {img_path.name}: {label_count}개 감지\n'
