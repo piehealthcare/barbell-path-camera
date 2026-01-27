@@ -2165,11 +2165,11 @@ print(f"Best model: {{results.save_dir}}/weights/best.pt", flush=True)
         model_path = None
         runs_dir = TRAINING_DIR / 'runs' / 'detect'
         if runs_dir.exists():
-            # barbell_endpoint로 시작하는 폴더 중 가장 최근 것 찾기
-            endpoint_dirs = sorted([d for d in runs_dir.iterdir()
-                                  if d.is_dir() and d.name.startswith('barbell_endpoint')],
+            # barbell 관련 폴더 중 가장 최근 것 찾기 (barbell_endpoint, barbell_augmented 등)
+            barbell_dirs = sorted([d for d in runs_dir.iterdir()
+                                  if d.is_dir() and d.name.startswith('barbell')],
                                  key=lambda x: x.stat().st_mtime, reverse=True)
-            for d in endpoint_dirs:
+            for d in barbell_dirs:
                 best_pt = d / 'weights' / 'best.pt'
                 if best_pt.exists():
                     model_path = best_pt

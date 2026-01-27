@@ -22,22 +22,10 @@ OUTPUT_IMAGES_DIR = TRAINING_DIR / 'augmented_images'
 OUTPUT_LABELS_DIR = TRAINING_DIR / 'augmented_labels'
 
 def get_matched_pairs():
-    """수동 라벨링 이미지-라벨 쌍만 찾기"""
-    # 메타데이터 로드
-    with open(METADATA_FILE) as f:
-        metadata = json.load(f)
-
-    # 수동 라벨만 필터링
-    manual_labels = {name for name, label_type in metadata.items() if label_type == 'manual'}
-    print(f"수동 라벨: {len(manual_labels)}개")
-
+    """라벨링된 이미지-라벨 쌍 찾기 (비어있지 않은 라벨만)"""
     pairs = []
     for img_path in IMAGES_DIR.glob('*'):
         if img_path.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.webp']:
-            continue
-
-        # 수동 라벨인지 확인
-        if img_path.stem not in manual_labels:
             continue
 
         label_path = LABELS_DIR / f"{img_path.stem}.txt"

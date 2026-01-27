@@ -53,8 +53,6 @@ class TrackingPage extends StatefulWidget {
 
 class _TrackingPageState extends State<TrackingPage> {
   final List<Offset> _path = [];
-  final List<Offset> _recentPositions = [];  // 스무딩용 최근 위치
-  static const int _smoothingWindow = 5;  // 스무딩 윈도우 크기
   static const double _maxJumpDistance = 0.15;  // 최대 이동 거리 (화면 비율)
 
   bool _isTracking = false;
@@ -131,7 +129,10 @@ class _TrackingPageState extends State<TrackingPage> {
                 GestureDetector(
                   onTap: () => setState(() {
                     _isTracking = !_isTracking;
-                    if (_isTracking) _path.clear();
+                    if (_isTracking) {
+                      _path.clear();
+                      _lastValidPosition = null;
+                    }
                   }),
                   child: Container(
                     width: 70,
@@ -217,32 +218,15 @@ class _TrackingPageState extends State<TrackingPage> {
       _boundingBox = box;
 
       if (_isTracking && best.confidence > 0.5) {
-        // 스무딩: 최근 위치들의 평균
-        _recentPositions.add(center);
-        if (_recentPositions.length > _smoothingWindow) {
-          _recentPositions.removeAt(0);
-        }
+        _lastValidPosition = center;
 
-        final smoothedPosition = _getSmoothedPosition();
-        _lastValidPosition = smoothedPosition;
-
-        // 이전 포인트와 너무 가까우면 추가 안함 (중복 방지)
-        if (_path.isEmpty || (_path.last - smoothedPosition).distance > 0.005) {
-          _path.add(smoothedPosition);
+        // 감지된 위치만 기록 (중복 방지)
+        if (_path.isEmpty || (_path.last - center).distance > 0.005) {
+          _path.add(center);
           if (_path.length > 500) _path.removeAt(0);
         }
       }
     });
-  }
-
-  Offset _getSmoothedPosition() {
-    if (_recentPositions.isEmpty) return Offset.zero;
-    double sumX = 0, sumY = 0;
-    for (final pos in _recentPositions) {
-      sumX += pos.dx;
-      sumY += pos.dy;
-    }
-    return Offset(sumX / _recentPositions.length, sumY / _recentPositions.length);
   }
 }
 
@@ -279,58 +263,42 @@ class _PathPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (path.length < 2) return;
+    if (path.isEmpty) return;
 
     // 스크린 좌표로 변환
     final screenPath = path.map((p) =>
       Offset(p.dx * size.width, p.dy * size.height)
     ).toList();
 
-    // 부드러운 곡선 패스 생성
-    final smoothPath = Path();
-    smoothPath.moveTo(screenPath[0].dx, screenPath[0].dy);
+    // 선 그리기 (점과 점 직선 연결)
+    if (screenPath.length >= 2) {
+      final linePaint = Paint()
+        ..color = Colors.cyan
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
 
-    for (int i = 1; i < screenPath.length; i++) {
-      final p0 = screenPath[i - 1];
-      final p1 = screenPath[i];
-
-      // 중간점을 사용한 부드러운 곡선
-      final midX = (p0.dx + p1.dx) / 2;
-      final midY = (p0.dy + p1.dy) / 2;
-      smoothPath.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
+      for (int i = 1; i < screenPath.length; i++) {
+        canvas.drawLine(screenPath[i - 1], screenPath[i], linePaint);
+      }
     }
-    // 마지막 점까지 연결
+
+    // 각 감지 지점에 점 찍기
+    final dotPaint = Paint()..color = Colors.cyan;
+    for (final point in screenPath) {
+      canvas.drawCircle(point, 4, dotPaint);
+    }
+
+    // 현재 위치 (마지막 점) 강조
     final lastPoint = screenPath.last;
-    smoothPath.lineTo(lastPoint.dx, lastPoint.dy);
-
-    // 글로우 효과 (외곽)
-    final glowPaint = Paint()
-      ..color = Colors.cyan.withOpacity(0.3)
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawPath(smoothPath, glowPaint);
-
-    // 메인 패스
-    final mainPaint = Paint()
-      ..color = Colors.cyan
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(smoothPath, mainPaint);
-
-    // 현재 위치 포인트 (밝은 점)
     canvas.drawCircle(
       lastPoint,
-      10,
-      Paint()..color = Colors.white.withOpacity(0.8),
+      8,
+      Paint()..color = Colors.white,
     );
     canvas.drawCircle(
       lastPoint,
-      6,
+      5,
       Paint()..color = Colors.cyan,
     );
   }
