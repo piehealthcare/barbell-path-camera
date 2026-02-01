@@ -2,15 +2,26 @@
 training/barbell_dataset/
 training/runs/
 training/crawled_data/
+training/crawled_new/
 training/extracted_frames/
 training/labeling_images/
 training/labeling_labels/
 training/youtube_temp/
 training/augmented_dataset/
 training/barbell_plate_dataset_new/
+training/raw_videos/
 training/*.npy
 training/*.zip
+training/*.pt
 calibration_image_sample_data_20x128x128x3_float32.npy
+
+# Video files (large)
+*.mp4
+*.m4a
+*.webm
+*.mov
+*.avi
+*.mkv
 
 # Flutter/Dart
 .dart_tool/
