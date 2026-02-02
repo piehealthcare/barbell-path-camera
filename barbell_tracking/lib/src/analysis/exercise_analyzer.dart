@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:flutter/material.dart';
+
 import '../scale/scale_config.dart';
 import 'vbt_zones.dart';
 
@@ -10,6 +12,60 @@ enum MovementPhase {
   ascending,
   atBottom,
   atTop,
+}
+
+/// Extension for MovementPhase display properties
+extension MovementPhaseExtension on MovementPhase {
+  /// Display name in English
+  String get displayName {
+    switch (this) {
+      case MovementPhase.idle:
+        return 'Idle';
+      case MovementPhase.ascending:
+        return 'Ascending (Concentric)';
+      case MovementPhase.descending:
+        return 'Descending (Eccentric)';
+      case MovementPhase.atTop:
+        return 'At Top';
+      case MovementPhase.atBottom:
+        return 'At Bottom';
+    }
+  }
+
+  /// Display name in Korean
+  String get displayNameKo {
+    switch (this) {
+      case MovementPhase.idle:
+        return '정지';
+      case MovementPhase.ascending:
+        return '상승 (컨센트릭)';
+      case MovementPhase.descending:
+        return '하강 (이센트릭)';
+      case MovementPhase.atTop:
+        return '최고점';
+      case MovementPhase.atBottom:
+        return '최저점';
+    }
+  }
+
+  /// Phase color for UI
+  Color get color {
+    switch (this) {
+      case MovementPhase.idle:
+        return Colors.grey;
+      case MovementPhase.ascending:
+        return Colors.green;
+      case MovementPhase.descending:
+        return Colors.orange;
+      case MovementPhase.atTop:
+        return Colors.cyan;
+      case MovementPhase.atBottom:
+        return Colors.purple;
+    }
+  }
+
+  /// Whether this phase represents active movement
+  bool get isMoving => this == MovementPhase.ascending || this == MovementPhase.descending;
 }
 
 /// Information about a single rep
@@ -244,6 +300,12 @@ class ExerciseAnalyzer {
   }
 
   ExerciseStats update(double x, double y, double vy, double speed) {
+    // Guard against invalid input values
+    if (x.isNaN || x.isInfinite) x = 0.5;
+    if (y.isNaN || y.isInfinite) y = 0.5;
+    if (vy.isNaN || vy.isInfinite) vy = 0;
+    if (speed.isNaN || speed.isInfinite || speed < 0) speed = 0;
+
     final now = DateTime.now();
 
     if (_currentSet == null && speed > idleThreshold) {
@@ -255,7 +317,9 @@ class ExerciseAnalyzer {
       _velocityHistory.removeAt(0);
     }
 
-    final smoothedVy = _velocityHistory.reduce((a, b) => a + b) / _velocityHistory.length;
+    final smoothedVy = _velocityHistory.isNotEmpty
+        ? _velocityHistory.reduce((a, b) => a + b) / _velocityHistory.length
+        : 0.0;
 
     if (speed > _maxSpeed) _maxSpeed = speed;
 
@@ -322,7 +386,7 @@ class ExerciseAnalyzer {
         double pathDeviation = 0;
         if (_currentRepXPositions.length > 1) {
           final variance = _currentRepXPositions.map((px) => pow(px - avgX, 2)).reduce((a, b) => a + b) / _currentRepXPositions.length;
-          pathDeviation = sqrt(variance);
+          pathDeviation = variance > 0 ? sqrt(variance) : 0;
         }
 
         final repInfo = RepInfo(
@@ -378,7 +442,7 @@ class ExerciseAnalyzer {
       currentAvgX = _currentRepXPositions.reduce((a, b) => a + b) / _currentRepXPositions.length;
       if (_currentRepXPositions.length > 1) {
         final variance = _currentRepXPositions.map((px) => pow(px - currentAvgX, 2)).reduce((a, b) => a + b) / _currentRepXPositions.length;
-        currentPathDeviation = sqrt(variance);
+        currentPathDeviation = variance > 0 ? sqrt(variance) : 0;
       }
     }
 
