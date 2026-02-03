@@ -1,0 +1,103 @@
+{
+  "@@locale": "en",
+  "appTitle": "PoinT Barbell Path",
+  "home": "Home",
+  "history": "History",
+  "settings": "Settings",
+  "quickStart": "Quick Start",
+  "recentSessions": "Recent Sessions",
+  "startTracking": "Start Tracking",
+  "stopTracking": "Stop Tracking",
+  "newSet": "New Set",
+  "finishSet": "Finish Set",
+  "selectExercise": "Select Exercise",
+  "squat": "Squat",
+  "benchPress": "Bench Press",
+  "deadlift": "Deadlift",
+  "overheadPress": "Overhead Press",
+  "custom": "Custom",
+  "calibration": "Calibration",
+  "calibrationDescription": "Set up your camera for accurate measurements",
+  "cameraDistance": "Camera Distance",
+  "metersAway": "{meters}m away",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "Reps",
+  "sets": "Sets",
+  "repCount": "{count} reps",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count} sets",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "Velocity",
+  "peakVelocity": "Peak Velocity",
+  "meanVelocity": "Mean Velocity",
+  "rom": "ROM",
+  "phase": "Phase",
+  "ascending": "Ascending",
+  "descending": "Descending",
+  "atTop": "At Top",
+  "atBottom": "At Bottom",
+  "idle": "Idle",
+  "sessionReview": "Session Review",
+  "sessionSummary": "Session Summary",
+  "saveSession": "Save Session",
+  "shareSession": "Share",
+  "discardSession": "Discard",
+  "totalReps": "Total Reps",
+  "totalSets": "Total Sets",
+  "avgVelocity": "Avg Velocity",
+  "sessionDuration": "Duration",
+  "noSessions": "No sessions recorded yet",
+  "recording": "Recording",
+  "startRecording": "Start Recording",
+  "stopRecording": "Stop Recording",
+  "savedToGallery": "Saved to gallery",
+  "cameraPermission": "Camera permission required",
+  "storagePermission": "Storage permission required",
+  "grantPermission": "Grant Permission",
+  "onboardingTitle1": "Track Your Barbell Path",
+  "onboardingDesc1": "AI analyzes your barbell movement in real-time",
+  "onboardingTitle2": "Velocity Based Training",
+  "onboardingDesc2": "Find your optimal training intensity with VBT zone analysis",
+  "onboardingTitle3": "Record Your Lifts",
+  "onboardingDesc3": "Save and share videos with barbell path overlay",
+  "getStarted": "Get Started",
+  "next": "Next",
+  "skip": "Skip",
+  "darkMode": "Dark Mode",
+  "language": "Language",
+  "about": "About",
+  "version": "Version",
+  "premium": "Premium",
+  "premiumDescription": "Unlock all features",
+  "delete": "Delete",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "ok": "OK",
+  "error": "Error",
+  "retry": "Retry",
+  "loading": "Loading...",
+  "noData": "No data",
+  "strengthZone": "Strength",
+  "strengthSpeedZone": "Strength-Speed",
+  "powerZone": "Power",
+  "speedStrengthZone": "Speed-Strength",
+  "speedZone": "Speed"
+}

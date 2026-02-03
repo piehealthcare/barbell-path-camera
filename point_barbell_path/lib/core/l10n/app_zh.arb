@@ -1,0 +1,103 @@
+{
+  "@@locale": "zh",
+  "appTitle": "PoinT 杠铃轨迹",
+  "home": "首页",
+  "history": "历史",
+  "settings": "设置",
+  "quickStart": "快速开始",
+  "recentSessions": "最近的训练",
+  "startTracking": "开始追踪",
+  "stopTracking": "停止追踪",
+  "newSet": "新组",
+  "finishSet": "完成该组",
+  "selectExercise": "选择动作",
+  "squat": "深蹲",
+  "benchPress": "卧推",
+  "deadlift": "硬拉",
+  "overheadPress": "过头推举",
+  "custom": "自定义",
+  "calibration": "校准",
+  "calibrationDescription": "设置相机以进行精确测量",
+  "cameraDistance": "相机距离",
+  "metersAway": "距离{meters}米",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "次数",
+  "sets": "组数",
+  "repCount": "{count}次",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count}组",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "速度",
+  "peakVelocity": "峰值速度",
+  "meanVelocity": "平均速度",
+  "rom": "运动范围",
+  "phase": "阶段",
+  "ascending": "上升",
+  "descending": "下降",
+  "atTop": "顶部",
+  "atBottom": "底部",
+  "idle": "待机",
+  "sessionReview": "训练回顾",
+  "sessionSummary": "训练总结",
+  "saveSession": "保存训练",
+  "shareSession": "分享",
+  "discardSession": "删除",
+  "totalReps": "总次数",
+  "totalSets": "总组数",
+  "avgVelocity": "平均速度",
+  "sessionDuration": "训练时长",
+  "noSessions": "暂无训练记录",
+  "recording": "录制中",
+  "startRecording": "开始录制",
+  "stopRecording": "停止录制",
+  "savedToGallery": "已保存到相册",
+  "cameraPermission": "需要相机权限",
+  "storagePermission": "需要存储权限",
+  "grantPermission": "授予权限",
+  "onboardingTitle1": "追踪杠铃轨迹",
+  "onboardingDesc1": "AI实时分析杠铃运动轨迹",
+  "onboardingTitle2": "基于速度的训练",
+  "onboardingDesc2": "通过VBT区间分析找到最佳训练强度",
+  "onboardingTitle3": "视频记录训练",
+  "onboardingDesc3": "保存和分享叠加了杠铃轨迹的训练视频",
+  "getStarted": "开始使用",
+  "next": "下一步",
+  "skip": "跳过",
+  "darkMode": "深色模式",
+  "language": "语言",
+  "about": "关于",
+  "version": "版本",
+  "premium": "高级版",
+  "premiumDescription": "解锁全部功能",
+  "delete": "删除",
+  "cancel": "取消",
+  "confirm": "确认",
+  "ok": "确定",
+  "error": "错误",
+  "retry": "重试",
+  "loading": "加载中...",
+  "noData": "暂无数据",
+  "strengthZone": "力量",
+  "strengthSpeedZone": "力量-速度",
+  "powerZone": "爆发力",
+  "speedStrengthZone": "速度-力量",
+  "speedZone": "速度"
+}

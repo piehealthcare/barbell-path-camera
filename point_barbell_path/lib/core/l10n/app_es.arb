@@ -1,0 +1,103 @@
+{
+  "@@locale": "es",
+  "appTitle": "PoinT Trayectoria de Barra",
+  "home": "Inicio",
+  "history": "Historial",
+  "settings": "Ajustes",
+  "quickStart": "Inicio rápido",
+  "recentSessions": "Sesiones recientes",
+  "startTracking": "Iniciar seguimiento",
+  "stopTracking": "Detener seguimiento",
+  "newSet": "Nueva serie",
+  "finishSet": "Finalizar serie",
+  "selectExercise": "Seleccionar ejercicio",
+  "squat": "Sentadilla",
+  "benchPress": "Press de banca",
+  "deadlift": "Peso muerto",
+  "overheadPress": "Press militar",
+  "custom": "Personalizado",
+  "calibration": "Calibración",
+  "calibrationDescription": "Configura la cámara para una medición precisa",
+  "cameraDistance": "Distancia de la cámara",
+  "metersAway": "{meters} m de distancia",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "Repeticiones",
+  "sets": "Series",
+  "repCount": "{count} reps",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count} series",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "Velocidad",
+  "peakVelocity": "Velocidad máxima",
+  "meanVelocity": "Velocidad media",
+  "rom": "Rango de movimiento",
+  "phase": "Fase",
+  "ascending": "Ascenso",
+  "descending": "Descenso",
+  "atTop": "Arriba",
+  "atBottom": "Abajo",
+  "idle": "En espera",
+  "sessionReview": "Revisión de sesión",
+  "sessionSummary": "Resumen de sesión",
+  "saveSession": "Guardar sesión",
+  "shareSession": "Compartir",
+  "discardSession": "Eliminar",
+  "totalReps": "Repeticiones totales",
+  "totalSets": "Series totales",
+  "avgVelocity": "Velocidad media",
+  "sessionDuration": "Duración del entrenamiento",
+  "noSessions": "No hay sesiones registradas",
+  "recording": "Grabando",
+  "startRecording": "Iniciar grabación",
+  "stopRecording": "Detener grabación",
+  "savedToGallery": "Guardado en la galería",
+  "cameraPermission": "Se requiere permiso de cámara",
+  "storagePermission": "Se requiere permiso de almacenamiento",
+  "grantPermission": "Conceder permiso",
+  "onboardingTitle1": "Rastrea la trayectoria de la barra",
+  "onboardingDesc1": "La IA analiza el movimiento de la barra en tiempo real",
+  "onboardingTitle2": "Entrenamiento basado en velocidad",
+  "onboardingDesc2": "Encuentra la intensidad óptima con el análisis de zonas VBT",
+  "onboardingTitle3": "Graba tus entrenamientos",
+  "onboardingDesc3": "Guarda y comparte vídeos con la trayectoria de la barra superpuesta",
+  "getStarted": "Comenzar",
+  "next": "Siguiente",
+  "skip": "Omitir",
+  "darkMode": "Modo oscuro",
+  "language": "Idioma",
+  "about": "Acerca de",
+  "version": "Versión",
+  "premium": "Premium",
+  "premiumDescription": "Desbloquea todas las funciones",
+  "delete": "Eliminar",
+  "cancel": "Cancelar",
+  "confirm": "Confirmar",
+  "ok": "Aceptar",
+  "error": "Error",
+  "retry": "Reintentar",
+  "loading": "Cargando...",
+  "noData": "Sin datos",
+  "strengthZone": "Fuerza",
+  "strengthSpeedZone": "Fuerza-Velocidad",
+  "powerZone": "Potencia",
+  "speedStrengthZone": "Velocidad-Fuerza",
+  "speedZone": "Velocidad"
+}

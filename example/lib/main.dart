@@ -155,7 +155,7 @@ class _TrackingPageState extends State<TrackingPage> {
   Color _rightPathColor = Colors.orange;
   bool _showPredictedPath = true;
   bool _showExerciseStats = true;
-  bool _showVelocityZone = true;
+  bool _showVelocityZone = false; // 속도 표시 비활성화
   bool _audioFeedback = false;
 
   @override
@@ -467,23 +467,15 @@ class _TrackingPageState extends State<TrackingPage> {
           style: TextStyle(color: color.withAlpha(128), fontSize: 11));
     }
 
-    final stats = result.exerciseStats;
-    final velocityMps = stats.getVelocityYMps(_scaleConfig);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('$label: ',
-                style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
-            Text(result.isDetected ? '감지' : '예측',
-                style: TextStyle(color: color.withAlpha(180), fontSize: 10)),
-          ],
-        ),
-        Text('${velocityMps.abs().toStringAsFixed(2)} m/s',
-            style: TextStyle(color: color.withAlpha(200), fontSize: 10)),
+        Text('$label: ',
+            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(result.isDetected ? '감지' : '예측',
+            style: TextStyle(color: color.withAlpha(180), fontSize: 10)),
+        Text(' (${result.path.length}pts)',
+            style: TextStyle(color: color.withAlpha(150), fontSize: 9)),
       ],
     );
   }
@@ -497,14 +489,6 @@ class _TrackingPageState extends State<TrackingPage> {
         : rightStats?.repCount ?? 0;
 
     final stats = leftStats ?? ExerciseStats.empty();
-    final velocityMps = stats.getVelocityYMps(_scaleConfig);
-    final accelMps2 = stats.getAccelerationMps2(_scaleConfig);
-    final maxSpeedMps = stats.getMaxSpeedMps(_scaleConfig);
-    final romCm = stats.getRomCm(_scaleConfig);
-
-    // Get velocity zone color
-    final zone = stats.getVelocityZone(_scaleConfig);
-    final zoneColor = _getVelocityZoneColor(zone);
 
     return Positioned(
       left: 16,
@@ -552,62 +536,10 @@ class _TrackingPageState extends State<TrackingPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
 
-            // Velocity with zone indicator
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: zoneColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${velocityMps.abs().toStringAsFixed(2)} m/s',
-                  style: TextStyle(
-                    color: zoneColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-
-            // Other stats
-            _buildStatRow('가속도', '${accelMps2.toStringAsFixed(1)} m/s²'),
-            _buildStatRow('최고속도', '${maxSpeedMps.toStringAsFixed(2)} m/s'),
-            _buildStatRow('ROM', '${romCm.toStringAsFixed(1)} cm'),
-
-            if (stats.lastRepDuration != null)
+            if (stats.lastRepDuration != null) ...[
+              const SizedBox(height: 8),
               _buildStatRow('마지막', '${stats.lastRepDuration!.toStringAsFixed(2)} s'),
-
-            // Tempo info
-            if (stats.eccentricTime != null && stats.concentricTime != null) ...[
-              const Divider(color: Colors.white24, height: 12),
-              _buildStatRow('하강', '${stats.eccentricTime!.toStringAsFixed(2)} s'),
-              _buildStatRow('상승', '${stats.concentricTime!.toStringAsFixed(2)} s'),
-            ],
-
-            // Current rep peak velocity
-            if (stats.currentRepPeakVelocity != null) ...[
-              const Divider(color: Colors.white24, height: 12),
-              _buildStatRow(
-                'Peak',
-                '${_scaleConfig.normalizedToMps(stats.currentRepPeakVelocity!).toStringAsFixed(2)} m/s',
-              ),
-            ],
-
-            // Path deviation
-            if (stats.pathDeviation > 0.001) ...[
-              _buildStatRow(
-                '편차',
-                '${stats.getPathDeviationCm(_scaleConfig).toStringAsFixed(1)} cm',
-              ),
             ],
           ],
         ),
@@ -1090,56 +1022,19 @@ class EnhancedPathPainter extends CustomPainter {
     // Current position
     final current = Offset(result.x * size.width, result.y * size.height);
 
-    // Zone color for current position
-    Color posColor = baseColor;
-    if (showVelocityZone) {
-      posColor = _getZoneColor(result.velocityZone);
-    }
-
     // Outer glow
-    canvas.drawCircle(current, 20, Paint()..color = posColor.withAlpha(38));
-    canvas.drawCircle(current, 15, Paint()..color = posColor.withAlpha(77));
+    canvas.drawCircle(current, 20, Paint()..color = baseColor.withAlpha(38));
+    canvas.drawCircle(current, 15, Paint()..color = baseColor.withAlpha(77));
 
     // Main circle
     final isDetected = result.isDetected;
-    canvas.drawCircle(current, 10, Paint()
-      ..color = isDetected ? posColor : posColor.withAlpha(128)
+    canvas.drawCircle(current, 12, Paint()
+      ..color = isDetected ? baseColor : baseColor.withAlpha(128)
       ..style = isDetected ? PaintingStyle.fill : PaintingStyle.stroke
       ..strokeWidth = 2);
 
     if (isDetected) {
-      canvas.drawCircle(current, 3, Paint()..color = Colors.white);
-    }
-
-    // Velocity indicator
-    if (result.speed > 0.001) {
-      final velocityEnd = Offset(
-        current.dx + result.vx * size.width * 5,
-        current.dy + result.vy * size.height * 5,
-      );
-      canvas.drawLine(
-        current,
-        velocityEnd,
-        Paint()
-          ..color = Colors.yellow.withAlpha(180)
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-  }
-
-  Color _getZoneColor(VelocityZone zone) {
-    switch (zone) {
-      case VelocityZone.speed:
-        return Colors.red;
-      case VelocityZone.speedStrength:
-        return Colors.orange;
-      case VelocityZone.power:
-        return Colors.yellow;
-      case VelocityZone.strengthSpeed:
-        return Colors.lightGreen;
-      case VelocityZone.strength:
-        return Colors.blue;
+      canvas.drawCircle(current, 4, Paint()..color = Colors.white);
     }
   }
 

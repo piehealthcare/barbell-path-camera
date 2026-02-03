@@ -1,0 +1,103 @@
+{
+  "@@locale": "ko",
+  "appTitle": "PoinT 바벨패스",
+  "home": "홈",
+  "history": "기록",
+  "settings": "설정",
+  "quickStart": "빠른 시작",
+  "recentSessions": "최근 세션",
+  "startTracking": "트래킹 시작",
+  "stopTracking": "트래킹 중지",
+  "newSet": "새 세트",
+  "finishSet": "세트 완료",
+  "selectExercise": "운동 선택",
+  "squat": "스쿼트",
+  "benchPress": "벤치프레스",
+  "deadlift": "데드리프트",
+  "overheadPress": "오버헤드프레스",
+  "custom": "사용자 지정",
+  "calibration": "캘리브레이션",
+  "calibrationDescription": "정확한 측정을 위해 카메라를 설정합니다",
+  "cameraDistance": "카메라 거리",
+  "metersAway": "{meters}m 거리",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "반복",
+  "sets": "세트",
+  "repCount": "{count}회",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count}세트",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "속도",
+  "peakVelocity": "최대 속도",
+  "meanVelocity": "평균 속도",
+  "rom": "가동 범위",
+  "phase": "페이즈",
+  "ascending": "상승",
+  "descending": "하강",
+  "atTop": "상단",
+  "atBottom": "하단",
+  "idle": "대기",
+  "sessionReview": "세션 리뷰",
+  "sessionSummary": "세션 요약",
+  "saveSession": "세션 저장",
+  "shareSession": "공유",
+  "discardSession": "삭제",
+  "totalReps": "총 반복수",
+  "totalSets": "총 세트수",
+  "avgVelocity": "평균 속도",
+  "sessionDuration": "운동 시간",
+  "noSessions": "기록된 세션이 없습니다",
+  "recording": "녹화 중",
+  "startRecording": "녹화 시작",
+  "stopRecording": "녹화 중지",
+  "savedToGallery": "갤러리에 저장되었습니다",
+  "cameraPermission": "카메라 권한이 필요합니다",
+  "storagePermission": "저장소 권한이 필요합니다",
+  "grantPermission": "권한 허용",
+  "onboardingTitle1": "바벨 경로를 추적하세요",
+  "onboardingDesc1": "AI가 실시간으로 바벨의 움직임을 분석합니다",
+  "onboardingTitle2": "속도 기반 훈련",
+  "onboardingDesc2": "VBT 존 분석으로 최적의 훈련 강도를 찾으세요",
+  "onboardingTitle3": "영상으로 기록하세요",
+  "onboardingDesc3": "바벨 경로가 합성된 영상을 저장하고 공유하세요",
+  "getStarted": "시작하기",
+  "next": "다음",
+  "skip": "건너뛰기",
+  "darkMode": "다크 모드",
+  "language": "언어",
+  "about": "앱 정보",
+  "version": "버전",
+  "premium": "프리미엄",
+  "premiumDescription": "모든 기능을 잠금 해제하세요",
+  "delete": "삭제",
+  "cancel": "취소",
+  "confirm": "확인",
+  "ok": "확인",
+  "error": "오류",
+  "retry": "다시 시도",
+  "loading": "로딩 중...",
+  "noData": "데이터 없음",
+  "strengthZone": "근력",
+  "strengthSpeedZone": "근력-스피드",
+  "powerZone": "파워",
+  "speedStrengthZone": "스피드-근력",
+  "speedZone": "스피드"
+}

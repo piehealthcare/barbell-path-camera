@@ -24,13 +24,13 @@ import base64
 # 설정
 PORT = 8085
 TRAINING_DIR = Path(__file__).parent
-IMAGES_DIR = TRAINING_DIR / "labeling_images"
+IMAGES_DIR = TRAINING_DIR / "labeling_images_new"
 LABELS_DIR = TRAINING_DIR / "labeling_labels"
 
 # 멀티 클래스 지원
 CLASS_NAMES = {
     0: "barbell_endpoint",   # 바벨 끝단 (플레이트 측면)
-    1: "barbell"             # 바벨 전체 (막대 + 플레이트)
+    1: "barbell_collar"      # 바벨 칼라 (원판 고정 클립)
 }
 CLASS_NAME = "barbell_endpoint"  # 기본값 (하위 호환)
 
@@ -666,8 +666,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 <div style="display: flex; align-items: center; gap: 8px; margin-left: 20px; padding: 4px 12px; background: #2d2d2d; border-radius: 4px;">
                     <span style="color: #888; font-size: 12px;">클래스:</span>
                     <select id="classSelector" onchange="changeClass()" style="background: #3d3d3d; color: white; border: 1px solid #555; padding: 4px 8px; border-radius: 4px; font-size: 13px;">
-                        <option value="0" style="color: #00ff88;">🎯 바벨 끝단</option>
-                        <option value="1" style="color: #ff6b6b;">📏 바벨 전체</option>
+                        <option value="0" style="color: #00ff88;">🎯 바벨 끝단 (플레이트)</option>
+                        <option value="1" style="color: #ff6b6b;">🔒 바벨 칼라 (고정클립)</option>
                     </select>
                 </div>
 
@@ -753,12 +753,12 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
         const CLASS_COLORS = {
             0: '#00ff88',  // 바벨 끝단 - 녹색
-            1: '#ff6b6b'   // 바벨 전체 - 빨강
+            1: '#ff6b6b'   // 바벨 칼라 - 빨강
         };
 
         const CLASS_NAMES = {
             0: '바벨 끝단',
-            1: '바벨 전체'
+            1: '바벨 칼라'
         };
 
         function changeClass() {

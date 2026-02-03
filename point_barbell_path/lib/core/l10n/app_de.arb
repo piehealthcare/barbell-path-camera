@@ -1,0 +1,103 @@
+{
+  "@@locale": "de",
+  "appTitle": "PoinT Hantelweg",
+  "home": "Startseite",
+  "history": "Verlauf",
+  "settings": "Einstellungen",
+  "quickStart": "Schnellstart",
+  "recentSessions": "Letzte Einheiten",
+  "startTracking": "Tracking starten",
+  "stopTracking": "Tracking stoppen",
+  "newSet": "Neuer Satz",
+  "finishSet": "Satz beenden",
+  "selectExercise": "Übung wählen",
+  "squat": "Kniebeuge",
+  "benchPress": "Bankdrücken",
+  "deadlift": "Kreuzheben",
+  "overheadPress": "Schulterdrücken",
+  "custom": "Benutzerdefiniert",
+  "calibration": "Kalibrierung",
+  "calibrationDescription": "Richten Sie die Kamera für präzise Messungen ein",
+  "cameraDistance": "Kameraabstand",
+  "metersAway": "{meters} m entfernt",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "Wiederholungen",
+  "sets": "Sätze",
+  "repCount": "{count} Wdh.",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count} Sätze",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "Geschwindigkeit",
+  "peakVelocity": "Maximalgeschwindigkeit",
+  "meanVelocity": "Durchschnittsgeschwindigkeit",
+  "rom": "Bewegungsumfang",
+  "phase": "Phase",
+  "ascending": "Aufwärts",
+  "descending": "Abwärts",
+  "atTop": "Oben",
+  "atBottom": "Unten",
+  "idle": "Bereit",
+  "sessionReview": "Einheitsübersicht",
+  "sessionSummary": "Zusammenfassung",
+  "saveSession": "Einheit speichern",
+  "shareSession": "Teilen",
+  "discardSession": "Löschen",
+  "totalReps": "Gesamtwiederholungen",
+  "totalSets": "Gesamtsätze",
+  "avgVelocity": "Durchschnittsgeschwindigkeit",
+  "sessionDuration": "Trainingsdauer",
+  "noSessions": "Keine Einheiten vorhanden",
+  "recording": "Aufnahme läuft",
+  "startRecording": "Aufnahme starten",
+  "stopRecording": "Aufnahme stoppen",
+  "savedToGallery": "In der Galerie gespeichert",
+  "cameraPermission": "Kameraberechtigung erforderlich",
+  "storagePermission": "Speicherberechtigung erforderlich",
+  "grantPermission": "Berechtigung erteilen",
+  "onboardingTitle1": "Verfolge den Hantelweg",
+  "onboardingDesc1": "KI analysiert die Hantelbewegung in Echtzeit",
+  "onboardingTitle2": "Geschwindigkeitsbasiertes Training",
+  "onboardingDesc2": "Finde die optimale Trainingsintensität mit der VBT-Zonenanalyse",
+  "onboardingTitle3": "Zeichne dein Training auf",
+  "onboardingDesc3": "Speichere und teile Videos mit eingeblendetem Hantelweg",
+  "getStarted": "Loslegen",
+  "next": "Weiter",
+  "skip": "Überspringen",
+  "darkMode": "Dunkelmodus",
+  "language": "Sprache",
+  "about": "Über die App",
+  "version": "Version",
+  "premium": "Premium",
+  "premiumDescription": "Alle Funktionen freischalten",
+  "delete": "Löschen",
+  "cancel": "Abbrechen",
+  "confirm": "Bestätigen",
+  "ok": "OK",
+  "error": "Fehler",
+  "retry": "Erneut versuchen",
+  "loading": "Laden...",
+  "noData": "Keine Daten",
+  "strengthZone": "Kraft",
+  "strengthSpeedZone": "Kraft-Schnelligkeit",
+  "powerZone": "Schnellkraft",
+  "speedStrengthZone": "Schnelligkeit-Kraft",
+  "speedZone": "Schnelligkeit"
+}

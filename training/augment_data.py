@@ -41,11 +41,66 @@ def apply_brightness_contrast(img, alpha=1.0, beta=0):
     """밝기/대비 조절"""
     return cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
 
-def apply_motion_blur(img, size=5):
-    """모션 블러 (수직 방향 - 바벨 움직임)"""
+def apply_motion_blur(img, size=5, direction='vertical'):
+    """모션 블러 (수직/수평/대각선 방향)"""
     kernel = np.zeros((size, size))
-    kernel[:, size // 2] = 1 / size
+    if direction == 'vertical':
+        kernel[:, size // 2] = 1 / size
+    elif direction == 'horizontal':
+        kernel[size // 2, :] = 1 / size
+    elif direction == 'diagonal':
+        np.fill_diagonal(kernel, 1 / size)
     return cv2.filter2D(img, -1, kernel)
+
+def apply_strong_motion_blur(img):
+    """강한 모션 블러 (빠른 움직임 시뮬레이션)"""
+    size = np.random.randint(9, 15)
+    direction = np.random.choice(['vertical', 'horizontal', 'diagonal'])
+    return apply_motion_blur(img, size=size, direction=direction)
+
+def apply_extreme_motion_blur(img):
+    """극강 모션 블러 (아주 빠른 움직임)"""
+    size = np.random.randint(20, 35)
+    direction = np.random.choice(['vertical', 'horizontal', 'diagonal'])
+    return apply_motion_blur(img, size=size, direction=direction)
+
+def apply_mild_motion_blur(img):
+    """약한 모션 블러 (느린 움직임)"""
+    size = np.random.randint(3, 7)
+    direction = np.random.choice(['vertical', 'horizontal', 'diagonal'])
+    return apply_motion_blur(img, size=size, direction=direction)
+
+def apply_zoom_blur(img, strength=0.1):
+    """줌 블러 (카메라 흔들림 시뮬레이션)"""
+    h, w = img.shape[:2]
+    center_x, center_y = w // 2, h // 2
+
+    result = img.copy().astype(np.float32)
+    for i in range(1, 5):
+        scale = 1 + strength * i * 0.25
+        M = cv2.getRotationMatrix2D((center_x, center_y), 0, scale)
+        scaled = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+        result = cv2.addWeighted(result, 0.8, scaled.astype(np.float32), 0.2, 0)
+    return result.astype(np.uint8)
+
+def apply_double_motion_blur(img):
+    """이중 모션 블러 (복합 움직임)"""
+    # 먼저 수직 블러
+    temp = apply_motion_blur(img, size=7, direction='vertical')
+    # 그 다음 약간의 수평 블러
+    return apply_motion_blur(temp, size=5, direction='horizontal')
+
+def apply_cutout(img, num_holes=2, max_size=50):
+    """랜덤 영역 가리기 (부분 가림 시뮬레이션)"""
+    h, w = img.shape[:2]
+    result = img.copy()
+    for _ in range(num_holes):
+        hole_h = np.random.randint(20, max_size)
+        hole_w = np.random.randint(20, max_size)
+        y = np.random.randint(0, h - hole_h)
+        x = np.random.randint(0, w - hole_w)
+        result[y:y+hole_h, x:x+hole_w] = np.random.randint(0, 255, (hole_h, hole_w, 3))
+    return result
 
 def apply_horizontal_flip(img, labels):
     """좌우 반전 + 라벨 좌표 변환"""
@@ -152,6 +207,66 @@ def main():
         bright_flipped, bright_flipped_labels = apply_horizontal_flip(bright_img, labels)
         cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_bright_flip.jpg"), bright_flipped)
         (OUTPUT_LABELS_DIR / f"{base_name}_bright_flip.txt").write_text('\n'.join(bright_flipped_labels))
+        total_generated += 1
+
+        # 9. 강한 모션 블러
+        strong_blur_img = apply_strong_motion_blur(img)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_strongblur.jpg"), strong_blur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_strongblur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 10. 수평 모션 블러
+        hblur_img = apply_motion_blur(img, size=9, direction='horizontal')
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_hblur.jpg"), hblur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_hblur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 11. 부분 가림 (Cutout)
+        cutout_img = apply_cutout(img, num_holes=2, max_size=60)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_cutout.jpg"), cutout_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_cutout.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 12. 어둡게 + 모션 블러
+        dark_blur_img = apply_motion_blur(dark_img, size=7)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_dark_blur.jpg"), dark_blur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_dark_blur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 13. 극강 모션 블러 (아주 빠른 움직임)
+        extreme_blur_img = apply_extreme_motion_blur(img)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_extremeblur.jpg"), extreme_blur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_extremeblur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 14. 약한 모션 블러 (느린 움직임)
+        mild_blur_img = apply_mild_motion_blur(img)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_mildblur.jpg"), mild_blur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_mildblur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 15. 줌 블러 (카메라 흔들림)
+        zoom_blur_img = apply_zoom_blur(img, strength=0.15)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_zoomblur.jpg"), zoom_blur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_zoomblur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 16. 이중 모션 블러 (복합 움직임)
+        double_blur_img = apply_double_motion_blur(img)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_doubleblur.jpg"), double_blur_img)
+        (OUTPUT_LABELS_DIR / f"{base_name}_doubleblur.txt").write_text('\n'.join(labels))
+        total_generated += 1
+
+        # 17. 극강 블러 + 반전
+        extreme_blur_flipped, extreme_blur_flipped_labels = apply_horizontal_flip(extreme_blur_img, labels)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_extremeblur_flip.jpg"), extreme_blur_flipped)
+        (OUTPUT_LABELS_DIR / f"{base_name}_extremeblur_flip.txt").write_text('\n'.join(extreme_blur_flipped_labels))
+        total_generated += 1
+
+        # 18. 밝게 + 극강 블러
+        bright_extreme_blur = apply_extreme_motion_blur(bright_img)
+        cv2.imwrite(str(OUTPUT_IMAGES_DIR / f"{base_name}_bright_extremeblur.jpg"), bright_extreme_blur)
+        (OUTPUT_LABELS_DIR / f"{base_name}_bright_extremeblur.txt").write_text('\n'.join(labels))
         total_generated += 1
 
     print(f"\n=== 증강 완료 ===")

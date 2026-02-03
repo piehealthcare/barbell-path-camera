@@ -1,0 +1,103 @@
+{
+  "@@locale": "pt",
+  "appTitle": "PoinT Trajetória da Barra",
+  "home": "Início",
+  "history": "Histórico",
+  "settings": "Configurações",
+  "quickStart": "Início rápido",
+  "recentSessions": "Sessões recentes",
+  "startTracking": "Iniciar rastreamento",
+  "stopTracking": "Parar rastreamento",
+  "newSet": "Nova série",
+  "finishSet": "Finalizar série",
+  "selectExercise": "Selecionar exercício",
+  "squat": "Agachamento",
+  "benchPress": "Supino",
+  "deadlift": "Levantamento terra",
+  "overheadPress": "Desenvolvimento",
+  "custom": "Personalizado",
+  "calibration": "Calibração",
+  "calibrationDescription": "Configure a câmera para medições precisas",
+  "cameraDistance": "Distância da câmera",
+  "metersAway": "{meters} m de distância",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "Repetições",
+  "sets": "Séries",
+  "repCount": "{count} reps",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count} séries",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "Velocidade",
+  "peakVelocity": "Velocidade máxima",
+  "meanVelocity": "Velocidade média",
+  "rom": "Amplitude de movimento",
+  "phase": "Fase",
+  "ascending": "Subida",
+  "descending": "Descida",
+  "atTop": "No topo",
+  "atBottom": "Embaixo",
+  "idle": "Em espera",
+  "sessionReview": "Revisão da sessão",
+  "sessionSummary": "Resumo da sessão",
+  "saveSession": "Salvar sessão",
+  "shareSession": "Compartilhar",
+  "discardSession": "Excluir",
+  "totalReps": "Total de repetições",
+  "totalSets": "Total de séries",
+  "avgVelocity": "Velocidade média",
+  "sessionDuration": "Duração do treino",
+  "noSessions": "Nenhuma sessão registrada",
+  "recording": "Gravando",
+  "startRecording": "Iniciar gravação",
+  "stopRecording": "Parar gravação",
+  "savedToGallery": "Salvo na galeria",
+  "cameraPermission": "Permissão de câmera necessária",
+  "storagePermission": "Permissão de armazenamento necessária",
+  "grantPermission": "Conceder permissão",
+  "onboardingTitle1": "Rastreie a trajetória da barra",
+  "onboardingDesc1": "A IA analisa o movimento da barra em tempo real",
+  "onboardingTitle2": "Treino baseado em velocidade",
+  "onboardingDesc2": "Encontre a intensidade ideal com a análise de zonas VBT",
+  "onboardingTitle3": "Grave seus treinos",
+  "onboardingDesc3": "Salve e compartilhe vídeos com a trajetória da barra sobreposta",
+  "getStarted": "Começar",
+  "next": "Próximo",
+  "skip": "Pular",
+  "darkMode": "Modo escuro",
+  "language": "Idioma",
+  "about": "Sobre",
+  "version": "Versão",
+  "premium": "Premium",
+  "premiumDescription": "Desbloqueie todas as funcionalidades",
+  "delete": "Excluir",
+  "cancel": "Cancelar",
+  "confirm": "Confirmar",
+  "ok": "OK",
+  "error": "Erro",
+  "retry": "Tentar novamente",
+  "loading": "Carregando...",
+  "noData": "Sem dados",
+  "strengthZone": "Força",
+  "strengthSpeedZone": "Força-Velocidade",
+  "powerZone": "Potência",
+  "speedStrengthZone": "Velocidade-Força",
+  "speedZone": "Velocidade"
+}

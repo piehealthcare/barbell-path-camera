@@ -1,0 +1,34 @@
+{
+  "name": "barbell_detector",
+  "version": "2.0.0",
+  "architecture": "YOLOv8s",
+  "training_run": "barbell_yolov8s",
+  "input_size": 640,
+  "num_classes": 2,
+  "labels": ["barbell_endpoint", "barbell_collar"],
+  "metrics": {
+    "mAP50": 0.981,
+    "mAP50-95": 0.821,
+    "precision": 0.953,
+    "recall": 0.931
+  },
+  "formats": {
+    "tflite": {
+      "file": "tflite/barbell_detector.tflite",
+      "quantization": "float16",
+      "input_shape": [1, 640, 640, 3],
+      "output_shape": [1, 6, 8400]
+    },
+    "coreml": {
+      "file": "coreml/barbell_detector.mlpackage",
+      "input": "image (640x640 RGB)",
+      "output": "VNCoreMLFeatureValueObservation"
+    },
+    "pytorch": {
+      "file": "pytorch/best.pt",
+      "framework": "ultralytics"
+    }
+  },
+  "created_at": "2026-02-04",
+  "notes": "YOLOv8s trained on augmented barbell dataset with 2 classes (endpoint, collar), 50 epochs"
+}

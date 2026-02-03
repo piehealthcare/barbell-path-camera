@@ -1,0 +1,103 @@
+{
+  "@@locale": "ja",
+  "appTitle": "PoinT バーベルパス",
+  "home": "ホーム",
+  "history": "履歴",
+  "settings": "設定",
+  "quickStart": "クイックスタート",
+  "recentSessions": "最近のセッション",
+  "startTracking": "トラッキング開始",
+  "stopTracking": "トラッキング停止",
+  "newSet": "新しいセット",
+  "finishSet": "セット完了",
+  "selectExercise": "種目を選択",
+  "squat": "スクワット",
+  "benchPress": "ベンチプレス",
+  "deadlift": "デッドリフト",
+  "overheadPress": "オーバーヘッドプレス",
+  "custom": "カスタム",
+  "calibration": "キャリブレーション",
+  "calibrationDescription": "正確な測定のためにカメラを設定します",
+  "cameraDistance": "カメラ距離",
+  "metersAway": "{meters}m 離れた位置",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "レップ",
+  "sets": "セット",
+  "repCount": "{count}回",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count}セット",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "速度",
+  "peakVelocity": "最大速度",
+  "meanVelocity": "平均速度",
+  "rom": "可動域",
+  "phase": "フェーズ",
+  "ascending": "上昇",
+  "descending": "下降",
+  "atTop": "トップ",
+  "atBottom": "ボトム",
+  "idle": "待機",
+  "sessionReview": "セッションレビュー",
+  "sessionSummary": "セッションサマリー",
+  "saveSession": "セッションを保存",
+  "shareSession": "共有",
+  "discardSession": "削除",
+  "totalReps": "合計レップ数",
+  "totalSets": "合計セット数",
+  "avgVelocity": "平均速度",
+  "sessionDuration": "トレーニング時間",
+  "noSessions": "記録されたセッションはありません",
+  "recording": "録画中",
+  "startRecording": "録画開始",
+  "stopRecording": "録画停止",
+  "savedToGallery": "ギャラリーに保存しました",
+  "cameraPermission": "カメラの権限が必要です",
+  "storagePermission": "ストレージの権限が必要です",
+  "grantPermission": "権限を許可",
+  "onboardingTitle1": "バーベルの軌道を追跡しよう",
+  "onboardingDesc1": "AIがリアルタイムでバーベルの動きを分析します",
+  "onboardingTitle2": "速度ベーストレーニング",
+  "onboardingDesc2": "VBTゾーン分析で最適なトレーニング強度を見つけましょう",
+  "onboardingTitle3": "動画で記録しよう",
+  "onboardingDesc3": "バーベルの軌道が合成された動画を保存・共有できます",
+  "getStarted": "始める",
+  "next": "次へ",
+  "skip": "スキップ",
+  "darkMode": "ダークモード",
+  "language": "言語",
+  "about": "アプリについて",
+  "version": "バージョン",
+  "premium": "プレミアム",
+  "premiumDescription": "すべての機能をアンロックしましょう",
+  "delete": "削除",
+  "cancel": "キャンセル",
+  "confirm": "確認",
+  "ok": "OK",
+  "error": "エラー",
+  "retry": "再試行",
+  "loading": "読み込み中...",
+  "noData": "データなし",
+  "strengthZone": "ストレングス",
+  "strengthSpeedZone": "ストレングス-スピード",
+  "powerZone": "パワー",
+  "speedStrengthZone": "スピード-ストレングス",
+  "speedZone": "スピード"
+}

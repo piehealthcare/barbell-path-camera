@@ -1,0 +1,103 @@
+{
+  "@@locale": "it",
+  "appTitle": "PoinT Traiettoria del Bilanciere",
+  "home": "Home",
+  "history": "Cronologia",
+  "settings": "Impostazioni",
+  "quickStart": "Avvio rapido",
+  "recentSessions": "Sessioni recenti",
+  "startTracking": "Avvia tracciamento",
+  "stopTracking": "Ferma tracciamento",
+  "newSet": "Nuova serie",
+  "finishSet": "Termina serie",
+  "selectExercise": "Seleziona esercizio",
+  "squat": "Squat",
+  "benchPress": "Panca piana",
+  "deadlift": "Stacco da terra",
+  "overheadPress": "Lento avanti",
+  "custom": "Personalizzato",
+  "calibration": "Calibrazione",
+  "calibrationDescription": "Configura la fotocamera per misurazioni precise",
+  "cameraDistance": "Distanza della fotocamera",
+  "metersAway": "{meters} m di distanza",
+  "@metersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "String"
+      }
+    }
+  },
+  "reps": "Ripetizioni",
+  "sets": "Serie",
+  "repCount": "{count} rip.",
+  "@repCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setCount": "{count} serie",
+  "@setCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "velocity": "Velocità",
+  "peakVelocity": "Velocità massima",
+  "meanVelocity": "Velocità media",
+  "rom": "Range di movimento",
+  "phase": "Fase",
+  "ascending": "Salita",
+  "descending": "Discesa",
+  "atTop": "In alto",
+  "atBottom": "In basso",
+  "idle": "In attesa",
+  "sessionReview": "Riepilogo sessione",
+  "sessionSummary": "Sommario sessione",
+  "saveSession": "Salva sessione",
+  "shareSession": "Condividi",
+  "discardSession": "Elimina",
+  "totalReps": "Ripetizioni totali",
+  "totalSets": "Serie totali",
+  "avgVelocity": "Velocità media",
+  "sessionDuration": "Durata dell'allenamento",
+  "noSessions": "Nessuna sessione registrata",
+  "recording": "Registrazione in corso",
+  "startRecording": "Avvia registrazione",
+  "stopRecording": "Ferma registrazione",
+  "savedToGallery": "Salvato nella galleria",
+  "cameraPermission": "Autorizzazione fotocamera richiesta",
+  "storagePermission": "Autorizzazione archiviazione richiesta",
+  "grantPermission": "Concedi autorizzazione",
+  "onboardingTitle1": "Traccia la traiettoria del bilanciere",
+  "onboardingDesc1": "L'IA analizza il movimento del bilanciere in tempo reale",
+  "onboardingTitle2": "Allenamento basato sulla velocità",
+  "onboardingDesc2": "Trova l'intensità ottimale con l'analisi delle zone VBT",
+  "onboardingTitle3": "Registra i tuoi allenamenti",
+  "onboardingDesc3": "Salva e condividi video con la traiettoria del bilanciere sovrapposta",
+  "getStarted": "Inizia",
+  "next": "Avanti",
+  "skip": "Salta",
+  "darkMode": "Modalità scura",
+  "language": "Lingua",
+  "about": "Informazioni",
+  "version": "Versione",
+  "premium": "Premium",
+  "premiumDescription": "Sblocca tutte le funzionalità",
+  "delete": "Elimina",
+  "cancel": "Annulla",
+  "confirm": "Conferma",
+  "ok": "OK",
+  "error": "Errore",
+  "retry": "Riprova",
+  "loading": "Caricamento...",
+  "noData": "Nessun dato",
+  "strengthZone": "Forza",
+  "strengthSpeedZone": "Forza-Velocità",
+  "powerZone": "Potenza",
+  "speedStrengthZone": "Velocità-Forza",
+  "speedZone": "Velocità"
+}

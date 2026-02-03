@@ -79,27 +79,39 @@ val: images/val
 
 names:
   0: barbell_endpoint
+  1: barbell_collar
 """
     (DATASET_DIR / 'data.yaml').write_text(yaml_content)
 
     return DATASET_DIR / 'data.yaml'
 
-def finetune_model(data_yaml, base_model):
+def finetune_model(data_yaml, base_model, use_yolov8s=False, high_res=False):
     """Fine-tuning: 기존 모델에서 이어서 학습"""
-    print(f"\n기존 모델에서 Fine-tuning: {base_model}")
 
-    model = YOLO(str(base_model))
+    # YOLOv8s로 업그레이드 시 새 모델에서 시작
+    if use_yolov8s:
+        print("\n=== YOLOv8s 모델로 업그레이드 ===")
+        model = YOLO('yolov8s.pt')
+    else:
+        print(f"\n기존 모델에서 Fine-tuning: {base_model}")
+        model = YOLO(str(base_model))
+
+    # 해상도 설정 (1280은 메모리 많이 사용)
+    img_size = 1280 if high_res else 640
+    batch_size = 8 if high_res else 16  # 고해상도 시 배치 줄임
+
+    print(f"해상도: {img_size}, 배치: {batch_size}")
 
     results = model.train(
         data=str(data_yaml),
-        epochs=30,  # Fine-tuning은 적은 에포크
-        imgsz=640,
-        batch=16,
-        patience=10,
-        name='barbell_finetuned',
+        epochs=50,  # 새 모델이므로 에포크 증가
+        imgsz=img_size,
+        batch=batch_size,
+        patience=15,
+        name='barbell_yolov8s_hires' if high_res else ('barbell_yolov8s' if use_yolov8s else 'barbell_finetuned'),
         device='mps',
         verbose=True,
-        lr0=0.001,  # 낮은 학습률로 fine-tuning
+        lr0=0.01 if use_yolov8s else 0.001,  # 새 모델은 높은 학습률
     )
 
     return results
@@ -121,22 +133,32 @@ def export_model():
     return mlpackage
 
 if __name__ == '__main__':
-    print("=== 1. 기존 모델 찾기 ===")
+    import sys
+
+    # 옵션: --upgrade (YOLOv8s 사용), --hires (1280 해상도)
+    use_yolov8s = '--upgrade' in sys.argv
+    high_res = '--hires' in sys.argv
+
+    print("=== 1. 설정 확인 ===")
+    print(f"  모델: {'YOLOv8s (업그레이드)' if use_yolov8s else 'Fine-tuning'}")
+    print(f"  해상도: {'1280 (고해상도)' if high_res else '640'}")
+
+    print("\n=== 2. 기존 모델 찾기 ===")
     base_model = find_best_model()
 
     if base_model:
         print(f"기존 모델 발견: {base_model}")
     else:
-        print("기존 모델 없음, yolov8n.pt에서 시작")
-        base_model = "yolov8n.pt"
+        print("기존 모델 없음")
+        base_model = None
 
-    print("\n=== 2. 데이터셋 준비 ===")
+    print("\n=== 3. 데이터셋 준비 ===")
     data_yaml = prepare_dataset()
 
-    print("\n=== 3. Fine-tuning 시작 ===")
-    finetune_model(data_yaml, base_model)
+    print("\n=== 4. 학습 시작 ===")
+    finetune_model(data_yaml, base_model, use_yolov8s=use_yolov8s, high_res=high_res)
 
-    print("\n=== 4. CoreML 내보내기 ===")
+    print("\n=== 5. CoreML 내보내기 ===")
     mlpackage = export_model()
 
     print("\n=== 완료 ===")
