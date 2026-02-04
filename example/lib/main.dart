@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -379,6 +381,33 @@ class _TrackingPageState extends State<TrackingPage> {
           // Velocity zone legend
           if (_showVelocityZone && _isTracking) _buildVelocityZoneLegend(),
 
+          // Speed color legend
+          if (_isTracking)
+            Positioned(
+              right: 16,
+              bottom: 100 + MediaQuery.of(context).padding.bottom,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('SPEED', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    _buildSpeedLegendItem(Colors.blue, 'FAST'),
+                    _buildSpeedLegendItem(Colors.cyan, 'QUICK'),
+                    _buildSpeedLegendItem(Colors.green, 'NORMAL'),
+                    _buildSpeedLegendItem(Colors.orange, 'SLOW'),
+                    _buildSpeedLegendItem(Colors.red, 'GRIND'),
+                  ],
+                ),
+              ),
+            ),
+
           // Bottom controls
           _buildBottomControls(),
 
@@ -541,9 +570,78 @@ class _TrackingPageState extends State<TrackingPage> {
               const SizedBox(height: 8),
               _buildStatRow('마지막', '${stats.lastRepDuration!.toStringAsFixed(2)} s'),
             ],
+            const SizedBox(height: 8),
+            // Path consistency gauge
+            _buildPathConsistencyGauge(),
           ],
         ),
       ),
+    );
+  }
+
+  double _calculatePathConsistency(TrackResult? result) {
+    if (result == null || !result.hasTrack || result.path.length < 10) {
+      return 1.0;
+    }
+    final recentPath = result.path.length > 30
+        ? result.path.sublist(result.path.length - 30)
+        : result.path;
+    final meanX = recentPath.map((p) => p.x).reduce((a, b) => a + b) /
+        recentPath.length;
+    final variance = recentPath
+            .map((p) => (p.x - meanX) * (p.x - meanX))
+            .reduce((a, b) => a + b) /
+        recentPath.length;
+    final stdDev = sqrt(variance);
+    return (1.0 - (stdDev / 0.05)).clamp(0.0, 1.0);
+  }
+
+  Widget _buildPathConsistencyGauge() {
+    final leftScore = _calculatePathConsistency(_leftTrackResult);
+    final rightScore = _calculatePathConsistency(_rightTrackResult);
+    final hasLeft = _leftTrackResult?.hasTrack ?? false;
+    final hasRight = _rightTrackResult?.hasTrack ?? false;
+    final score = hasLeft && hasRight
+        ? (leftScore + rightScore) / 2
+        : hasLeft
+            ? leftScore
+            : rightScore;
+
+    Color color;
+    String label;
+    if (score >= 0.8) { color = Colors.green; label = 'STABLE'; }
+    else if (score >= 0.6) { color = Colors.lightGreen; label = 'GOOD'; }
+    else if (score >= 0.4) { color = Colors.yellow; label = 'OK'; }
+    else if (score >= 0.2) { color = Colors.orange; label = 'DRIFT'; }
+    else { color = Colors.red; label = 'UNSTABLE'; }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(score >= 0.6 ? Icons.check_circle : Icons.warning, color: color, size: 12),
+            const SizedBox(width: 4),
+            Text('PATH $label',
+                style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 80,
+          height: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: score,
+              backgroundColor: Colors.white12,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -859,6 +957,20 @@ class _TrackingPageState extends State<TrackingPage> {
     );
   }
 
+  Widget _buildSpeedLegendItem(Color color, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 12, height: 3, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(1))),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 8)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomControls() {
     return Positioned(
       bottom: 24 + MediaQuery.of(context).padding.bottom,
@@ -982,19 +1094,60 @@ class EnhancedPathPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (leftResult != null && leftResult!.hasTrack) {
-      _drawPath(canvas, size, leftResult!, leftColor);
+      _drawPath(canvas, size, leftResult!);
     }
     if (rightResult != null && rightResult!.hasTrack) {
-      _drawPath(canvas, size, rightResult!, rightColor);
+      _drawPath(canvas, size, rightResult!);
     }
   }
 
-  void _drawPath(Canvas canvas, Size size, TrackResult result, Color baseColor) {
-    final path = result.path;
-    if (path.length < 2) return;
+  double _segmentSpeed(TrackPoint a, TrackPoint b, Size size) {
+    final dt = b.timestamp.difference(a.timestamp).inMicroseconds / 1e6;
+    if (dt <= 0) return 0;
+    final dx = (b.x - a.x) * size.width;
+    final dy = (b.y - a.y) * size.height;
+    return sqrt(dx * dx + dy * dy) / dt;
+  }
 
-    final detectedPaint = Paint()
-      ..strokeWidth = 4.0
+  Color _speedToColor(double speed, double medianSpeed, double opacity) {
+    if (medianSpeed <= 0) {
+      return Colors.green.withAlpha((opacity * 255).toInt());
+    }
+    final ratio = speed / medianSpeed;
+    if (ratio < 0.4) {
+      return Color.lerp(Colors.red[900]!, Colors.red, (ratio / 0.4).clamp(0.0, 1.0))!
+          .withAlpha((opacity * 255).toInt());
+    } else if (ratio < 0.7) {
+      final t = ((ratio - 0.4) / 0.3).clamp(0.0, 1.0);
+      return Color.lerp(Colors.orange, Colors.yellow, t)!
+          .withAlpha((opacity * 255).toInt());
+    } else if (ratio < 1.3) {
+      return Colors.green.withAlpha((opacity * 255).toInt());
+    } else if (ratio < 2.0) {
+      final t = ((ratio - 1.3) / 0.7).clamp(0.0, 1.0);
+      return Color.lerp(Colors.cyan, Colors.lightBlue, t)!
+          .withAlpha((opacity * 255).toInt());
+    } else {
+      return Colors.blue.withAlpha((opacity * 255).toInt());
+    }
+  }
+
+  void _drawPath(Canvas canvas, Size size, TrackResult result) {
+    final path = result.path;
+    if (path.isEmpty && !result.hasTrack) return;
+
+    final speeds = <double>[];
+    for (int i = 1; i < path.length; i++) {
+      speeds.add(_segmentSpeed(path[i - 1], path[i], size));
+    }
+
+    final sortedSpeeds = List<double>.from(speeds)..sort();
+    final nonZeroSpeeds = sortedSpeeds.where((s) => s > 0).toList();
+    final medianSpeed = nonZeroSpeeds.isNotEmpty
+        ? nonZeroSpeeds[nonZeroSpeeds.length ~/ 2]
+        : 1.0;
+
+    final paint = Paint()
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
@@ -1006,30 +1159,33 @@ class EnhancedPathPainter extends CustomPainter {
     for (int i = 1; i < path.length; i++) {
       final start = Offset(path[i - 1].x * size.width, path[i - 1].y * size.height);
       final end = Offset(path[i].x * size.width, path[i].y * size.height);
-      final opacity = (i / path.length).clamp(0.2, 1.0);
+      final opacity = (i / path.length).clamp(0.3, 1.0);
       final isPredicted = path[i].isPredicted || path[i - 1].isPredicted;
+      final segSpeed = speeds[i - 1];
 
       if (isPredicted) {
         if (!showPredicted) continue;
-        predictedPaint.color = baseColor.withAlpha((opacity * 0.5 * 255).toInt());
+        predictedPaint.color = Colors.white.withAlpha((opacity * 0.3 * 255).toInt());
         _drawDashedLine(canvas, start, end, predictedPaint);
       } else {
-        detectedPaint.color = baseColor.withAlpha((opacity * 255).toInt());
-        canvas.drawLine(start, end, detectedPaint);
+        final color = _speedToColor(segSpeed, medianSpeed, opacity);
+        paint.color = color;
+        final ratio = medianSpeed > 0 ? segSpeed / medianSpeed : 1.0;
+        paint.strokeWidth = ratio < 0.5 ? 6.0 : (ratio > 1.5 ? 3.0 : 4.0);
+        canvas.drawLine(start, end, paint);
       }
     }
 
-    // Current position
     final current = Offset(result.x * size.width, result.y * size.height);
+    final currentSpeed = speeds.isNotEmpty ? speeds.last : 0.0;
+    final currentColor = _speedToColor(currentSpeed, medianSpeed, 1.0);
 
-    // Outer glow
-    canvas.drawCircle(current, 20, Paint()..color = baseColor.withAlpha(38));
-    canvas.drawCircle(current, 15, Paint()..color = baseColor.withAlpha(77));
+    canvas.drawCircle(current, 20, Paint()..color = currentColor.withAlpha(38));
+    canvas.drawCircle(current, 15, Paint()..color = currentColor.withAlpha(77));
 
-    // Main circle
     final isDetected = result.isDetected;
     canvas.drawCircle(current, 12, Paint()
-      ..color = isDetected ? baseColor : baseColor.withAlpha(128)
+      ..color = isDetected ? currentColor : currentColor.withAlpha(128)
       ..style = isDetected ? PaintingStyle.fill : PaintingStyle.stroke
       ..strokeWidth = 2);
 

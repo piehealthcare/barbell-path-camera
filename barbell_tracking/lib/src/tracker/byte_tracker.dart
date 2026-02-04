@@ -156,9 +156,7 @@ class ByteTracker {
     );
 
     final smoothed = _smoother.addPoint(rawPoint);
-    if (smoothed != null) {
-      _path.add(smoothed);
-    }
+    _path.add(smoothed);
 
     if (_path.length > maxPathLength) {
       _path.removeAt(0);

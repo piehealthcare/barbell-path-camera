@@ -11,31 +11,47 @@ class PathSmoother {
   final List<TrackPoint> _rawPoints = [];
   final List<TrackPoint> _smoothedPoints = [];
 
+  /// Count consecutive outliers to detect legitimate fast motion
+  int _consecutiveOutliers = 0;
+
   PathSmoother({
     this.windowSize = 5,
-    this.outlierThreshold = 0.15,
-    this.minMovementThreshold = 0.002,
+    this.outlierThreshold = 0.35,
+    this.minMovementThreshold = 0.001,
   });
 
-  /// Add a new point and get smoothed result
-  TrackPoint? addPoint(TrackPoint point) {
-    // Check for outlier
+  /// Add a new point and get smoothed result.
+  /// Always returns a non-null point to ensure the path is always drawn.
+  TrackPoint addPoint(TrackPoint point) {
     if (_rawPoints.isNotEmpty) {
       final last = _rawPoints.last;
       final distance = sqrt(pow(point.x - last.x, 2) + pow(point.y - last.y, 2));
 
-      // Reject outlier
+      // Outlier handling: if too far from last point, check if it's
+      // a legitimate fast motion (consecutive outliers = real movement)
       if (distance > outlierThreshold) {
-        return null;
+        _consecutiveOutliers++;
+        if (_consecutiveOutliers >= 2) {
+          // Consecutive outliers = legitimate fast motion, accept and reset
+          _rawPoints.clear();
+          _rawPoints.add(point);
+          _consecutiveOutliers = 0;
+          _smoothedPoints.add(point);
+          return point;
+        }
+        // Single outlier: return last known position to maintain continuity
+        return _smoothedPoints.isNotEmpty ? _smoothedPoints.last : point;
       }
 
-      // Reject if movement too small (noise)
+      _consecutiveOutliers = 0;
+
+      // Small movement: still add to raw points and return smoothed
       if (distance < minMovementThreshold && !point.isPredicted) {
         _rawPoints.add(point);
         if (_rawPoints.length > windowSize * 2) {
           _rawPoints.removeAt(0);
         }
-        return _smoothedPoints.isNotEmpty ? _smoothedPoints.last : null;
+        return _smoothedPoints.isNotEmpty ? _smoothedPoints.last : point;
       }
     }
 
@@ -79,6 +95,7 @@ class PathSmoother {
   void clear() {
     _rawPoints.clear();
     _smoothedPoints.clear();
+    _consecutiveOutliers = 0;
   }
 
   void limitLength(int maxLength) {

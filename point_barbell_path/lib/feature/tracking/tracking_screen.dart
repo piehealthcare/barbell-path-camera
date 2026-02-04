@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -211,7 +213,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     try {
       final detections = await _mlService.detectBarbell(image);
 
-      if (!mounted) return;
+      if (!mounted) {
+        _isProcessingFrame = false;
+        return;
+      }
 
       final boxes = <Rect>[];
       for (final det in detections) {
@@ -222,11 +227,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         ));
       }
 
-      if (detections.isNotEmpty) {
-        _updateTrackers(detections);
-      } else {
-        _updateTrackers([]);
-      }
+      _updateTrackers(detections);
 
       if (_recordingService.isRecording && image.planes.isNotEmpty) {
         _recordingService.addFrame(
@@ -257,14 +258,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     if (detections.isEmpty) {
       _leftTrackResult = _leftTracker.update([]);
       _rightTrackResult = _rightTracker.update([]);
+      if (mounted) setState(() {});
       return;
     }
 
     // Sort detections by x position, split into left/right
     detections.sort((a, b) => a.x.compareTo(b.x));
 
-    final leftDetections =
-        detections.isNotEmpty ? [detections.first] : <Detection>[];
+    final leftDetections = [detections.first];
     final rightDetections =
         detections.length >= 2 ? [detections.last] : <Detection>[];
 
@@ -280,6 +281,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         newRightRepCount > prevRightRepCount) {
       HapticFeedback.mediumImpact();
     }
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -444,6 +447,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                             color: Colors.white54, fontSize: 11),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    // Path consistency gauge
+                    _PathConsistencyGauge(
+                      leftResult: _leftTrackResult,
+                      rightResult: _rightTrackResult,
+                    ),
                   ],
                 ),
               ),
@@ -482,6 +491,37 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
               ),
             ),
 
+          // Speed color legend (shown when tracking)
+          if (_isTracking)
+            Positioned(
+              left: 16,
+              bottom: 100 + MediaQuery.of(context).padding.bottom,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('SPEED',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    _buildSpeedLegendRow(Colors.blue, 'FAST'),
+                    _buildSpeedLegendRow(Colors.cyan, 'QUICK'),
+                    _buildSpeedLegendRow(Colors.green, 'NORMAL'),
+                    _buildSpeedLegendRow(Colors.orange, 'SLOW'),
+                    _buildSpeedLegendRow(Colors.red, 'GRIND'),
+                  ],
+                ),
+              ),
+            ),
+
           // Bottom controls
           Positioned(
             bottom: 0,
@@ -497,6 +537,136 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
           ),
         ],
       ),
+    );
+  }
+  Widget _buildSpeedLegendRow(Color color, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 12,
+            height: 3,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 8)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Path consistency gauge - shows how stable the barbell path is
+/// Green = very consistent, Yellow = moderate, Red = unstable
+class _PathConsistencyGauge extends StatelessWidget {
+  final TrackResult? leftResult;
+  final TrackResult? rightResult;
+
+  const _PathConsistencyGauge({this.leftResult, this.rightResult});
+
+  /// Calculate path consistency score (0.0 = bad, 1.0 = perfect)
+  /// Based on X-axis standard deviation of recent path points
+  double _calculateConsistency(TrackResult? result) {
+    if (result == null || !result.hasTrack || result.path.length < 10) {
+      return 1.0; // Not enough data, assume good
+    }
+
+    // Use last 30 points for recent consistency
+    final recentPath = result.path.length > 30
+        ? result.path.sublist(result.path.length - 30)
+        : result.path;
+
+    // Calculate mean X
+    final meanX = recentPath.map((p) => p.x).reduce((a, b) => a + b) /
+        recentPath.length;
+
+    // Calculate standard deviation of X positions
+    final variance = recentPath
+            .map((p) => (p.x - meanX) * (p.x - meanX))
+            .reduce((a, b) => a + b) /
+        recentPath.length;
+    final stdDev = sqrt(variance);
+
+    // Map stdDev to score: 0.0 stdDev = 1.0 score, 0.05+ stdDev = 0.0 score
+    return (1.0 - (stdDev / 0.05)).clamp(0.0, 1.0);
+  }
+
+  Color _scoreToColor(double score) {
+    if (score >= 0.8) return Colors.green;
+    if (score >= 0.6) return Colors.lightGreen;
+    if (score >= 0.4) return Colors.yellow;
+    if (score >= 0.2) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _scoreToLabel(double score) {
+    if (score >= 0.8) return 'STABLE';
+    if (score >= 0.6) return 'GOOD';
+    if (score >= 0.4) return 'OK';
+    if (score >= 0.2) return 'DRIFT';
+    return 'UNSTABLE';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final leftScore = _calculateConsistency(leftResult);
+    final rightScore = _calculateConsistency(rightResult);
+    // Use the better-tracked side, or average if both exist
+    final hasLeft = leftResult?.hasTrack ?? false;
+    final hasRight = rightResult?.hasTrack ?? false;
+    final score = hasLeft && hasRight
+        ? (leftScore + rightScore) / 2
+        : hasLeft
+            ? leftScore
+            : rightScore;
+
+    final color = _scoreToColor(score);
+    final label = _scoreToLabel(score);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              score >= 0.6 ? Icons.check_circle : Icons.warning,
+              color: color,
+              size: 12,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'PATH $label',
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        // Progress bar
+        SizedBox(
+          width: 80,
+          height: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: score,
+              backgroundColor: Colors.white12,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -622,20 +792,86 @@ class _DualPathPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (leftResult != null && leftResult!.hasTrack) {
-      _drawPath(canvas, size, leftResult!, Colors.cyan);
+      _drawPath(canvas, size, leftResult!);
     }
     if (rightResult != null && rightResult!.hasTrack) {
-      _drawPath(canvas, size, rightResult!, Colors.orange);
+      _drawPath(canvas, size, rightResult!);
     }
   }
 
-  void _drawPath(
-      Canvas canvas, Size size, TrackResult result, Color baseColor) {
-    final path = result.path;
-    if (path.length < 2) return;
+  /// Calculate velocity between two consecutive TrackPoints (pixels/sec)
+  double _segmentSpeed(TrackPoint a, TrackPoint b, Size size) {
+    final dt = b.timestamp.difference(a.timestamp).inMicroseconds / 1e6;
+    if (dt <= 0) return 0;
+    final dx = (b.x - a.x) * size.width;
+    final dy = (b.y - a.y) * size.height;
+    return sqrt(dx * dx + dy * dy) / dt;
+  }
 
-    final detectedPaint = Paint()
-      ..strokeWidth = 4.0
+  /// Map speed to color:
+  /// - Green: normal/consistent speed
+  /// - Red/Orange: slow (grinding/sticking point)
+  /// - Blue/Cyan: fast (explosive)
+  /// Uses relative thresholds based on median speed of the path
+  Color _speedToColor(double speed, double medianSpeed, double opacity) {
+    if (medianSpeed <= 0) {
+      return Colors.green.withAlpha((opacity * 255).toInt());
+    }
+
+    final ratio = speed / medianSpeed;
+
+    if (ratio < 0.4) {
+      // Very slow - deep red (sticking point)
+      return Color.lerp(
+        Colors.red[900]!,
+        Colors.red,
+        (ratio / 0.4).clamp(0.0, 1.0),
+      )!.withAlpha((opacity * 255).toInt());
+    } else if (ratio < 0.7) {
+      // Slow - orange to yellow
+      final t = ((ratio - 0.4) / 0.3).clamp(0.0, 1.0);
+      return Color.lerp(
+        Colors.orange,
+        Colors.yellow,
+        t,
+      )!.withAlpha((opacity * 255).toInt());
+    } else if (ratio < 1.3) {
+      // Normal speed - green
+      return Colors.green.withAlpha((opacity * 255).toInt());
+    } else if (ratio < 2.0) {
+      // Fast - cyan to light blue
+      final t = ((ratio - 1.3) / 0.7).clamp(0.0, 1.0);
+      return Color.lerp(
+        Colors.cyan,
+        Colors.lightBlue,
+        t,
+      )!.withAlpha((opacity * 255).toInt());
+    } else {
+      // Very fast - blue (explosive)
+      return Colors.blue.withAlpha((opacity * 255).toInt());
+    }
+  }
+
+  void _drawPath(Canvas canvas, Size size, TrackResult result) {
+    final path = result.path;
+
+    // Always draw current position indicator even with 0-1 points
+    if (path.isEmpty && !result.hasTrack) return;
+
+    // Calculate speeds for all segments
+    final speeds = <double>[];
+    for (int i = 1; i < path.length; i++) {
+      speeds.add(_segmentSpeed(path[i - 1], path[i], size));
+    }
+
+    // Calculate median speed for relative comparison
+    final sortedSpeeds = List<double>.from(speeds)..sort();
+    final nonZeroSpeeds = sortedSpeeds.where((s) => s > 0).toList();
+    final medianSpeed = nonZeroSpeeds.isNotEmpty
+        ? nonZeroSpeeds[nonZeroSpeeds.length ~/ 2]
+        : 1.0;
+
+    final paint = Paint()
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
@@ -649,29 +885,34 @@ class _DualPathPainter extends CustomPainter {
           Offset(path[i - 1].x * size.width, path[i - 1].y * size.height);
       final end =
           Offset(path[i].x * size.width, path[i].y * size.height);
-      final opacity = (i / path.length).clamp(0.2, 1.0);
+      final opacity = (i / path.length).clamp(0.3, 1.0);
       final isPredicted = path[i].isPredicted || path[i - 1].isPredicted;
+      final segSpeed = speeds[i - 1];
 
       if (isPredicted) {
-        predictedPaint.color =
-            baseColor.withAlpha((opacity * 0.5 * 255).toInt());
+        predictedPaint.color = Colors.white.withAlpha((opacity * 0.3 * 255).toInt());
         _drawDashedLine(canvas, start, end, predictedPaint);
       } else {
-        detectedPaint.color =
-            baseColor.withAlpha((opacity * 255).toInt());
-        canvas.drawLine(start, end, detectedPaint);
+        final color = _speedToColor(segSpeed, medianSpeed, opacity);
+        paint.color = color;
+        // Thicker line for slow segments (sticking point emphasis)
+        final ratio = medianSpeed > 0 ? segSpeed / medianSpeed : 1.0;
+        paint.strokeWidth = ratio < 0.5 ? 6.0 : (ratio > 1.5 ? 3.0 : 4.0);
+        canvas.drawLine(start, end, paint);
       }
     }
 
-    // Current position indicator
+    // Current position indicator with velocity color
     final current =
         Offset(result.x * size.width, result.y * size.height);
+    final currentSpeed = speeds.isNotEmpty ? speeds.last : 0.0;
+    final currentColor = _speedToColor(currentSpeed, medianSpeed, 1.0);
 
     // Outer glow
     canvas.drawCircle(
-        current, 20, Paint()..color = baseColor.withAlpha(38));
+        current, 20, Paint()..color = currentColor.withAlpha(38));
     canvas.drawCircle(
-        current, 15, Paint()..color = baseColor.withAlpha(77));
+        current, 15, Paint()..color = currentColor.withAlpha(77));
 
     // Main circle
     final isDetected = result.isDetected;
@@ -680,7 +921,7 @@ class _DualPathPainter extends CustomPainter {
         12,
         Paint()
           ..color =
-              isDetected ? baseColor : baseColor.withAlpha(128)
+              isDetected ? currentColor : currentColor.withAlpha(128)
           ..style =
               isDetected ? PaintingStyle.fill : PaintingStyle.stroke
           ..strokeWidth = 2);
