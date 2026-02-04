@@ -139,10 +139,7 @@ class BarbellDetectorPlugin {
 
         request.imageCropAndScaleOption = .scaleFill
 
-        // Retain the pixel buffer to ensure it lives until the async block completes
-        CVPixelBufferRetain(buffer)
         DispatchQueue.global(qos: .userInitiated).async {
-            defer { CVPixelBufferRelease(buffer) }
             do {
                 let handler = VNImageRequestHandler(cvPixelBuffer: buffer, options: [:])
                 try handler.perform([request])
